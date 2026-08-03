@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>배드민턴 랜덤 매칭</title>
+<link rel="icon" href="data:," />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { margin: 0; }
+  .scorefont { font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .headfont { font-family: 'Arial Black', 'Helvetica Neue', sans-serif; letter-spacing: 0.03em; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ---------- helpers ----------
+const uid = () => Math.random().toString(36).slice(2, 9);
+const pKey = (a, b) => [a, b].sort().join("|");
+const STORAGE_KEY = "bm_roster_v1";
+
+function buildHistory() {
+  return { partner: {}, opponent: {} };
+}
+function bump(map, key) {
+  map[key] = (map[key] || 0) + 1;
+}
+
+function loadRosterFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+function saveRosterToStorage(list) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// score a single 4-person court split
+function splitScore(four, hist) {
+  const splits = [
+    [[four[0], four[1]], [four[2], four[3]]],
+    [[four[0], four[2]], [four[1], four[3]]],
+    [[four[0], four[3]], [four[1], four[2]]],
+  ];
+  let best = null;
+  for (const [a, b] of splits) {
+    const s =
+      (hist.partner[pKey(a[0].id, a[1].id)] || 0) * 3 +
+      (hist.partner[pKey(b[0].id, b[1].id)] || 0) * 3 +
+      (hist.opponent[pKey(a[0].id, b[0].id)] || 0) +
+      (hist.opponent[pKey(a[0].id, b[1].id)] || 0) +
+      (hist.opponent[pKey(a[1].id, b[0].id)] || 0) +
+      (hist.opponent[pKey(a[1].id, b[1].id)] || 0);
+    if (!best || s < best.s) best = { s, a, b };
+  }
+  return best;
+}
+
+function generateRound(players, numCourts, hist) {
+  const need = numCourts * 4;
+  const sorted = [...players].sort(
+    (a, b) => a.gamesPlayed - b.gamesPlayed || Math.random() - 0.5
+  );
+  const playing = sorted.slice(0, need);
+  const usable = playing.slice(0, Math.floor(playing.length / 4) * 4);
+  const resting = sorted.slice(usable.length);
+
+  let bestAssignment = null;
+  let bestTotal = Infinity;
+  for (let t = 0; t < 40; t++) {
+    const shuffled = [...usable].sort(() => Math.random() - 0.5);
+    let total = 0;
+    const courts = [];
+    for (let i = 0; i < shuffled.length; i += 4) {
+      const four = shuffled.slice(i, i + 4);
+      const { s, a, b } = splitScore(four, hist);
+      total += s;
+      courts.push({ teamA: a, teamB: b });
+    }
+    if (total < bestTotal) {
+      bestTotal = total;
+      bestAssignment = courts;
+    }
+  }
+
+  const matches = (bestAssignment || []).map((c, idx) => ({
+    id: uid(),
+    court: idx + 1,
+    teamA: c.teamA,
+    teamB: c.teamB,
+    scoreA: "",
+    scoreB: "",
+    done: false,
+  }));
+
+  return { matches, resting };
+}
+
+// ---------- tiny icon helper (emoji, no icon library needed) ----------
+const Icon = ({ children, className }) => (
+  <span className={className} style={{ lineHeight: 1 }}>{children}</span>
+);
+
+// ---------- main app ----------
+function App() {
+  const [tab, setTab] = useState("players");
+  const [players, setPlayers] = useState([]);
+  const [roster, setRoster] = useState([]);
+  const [manageMode, setManageMode] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [copyMsg, setCopyMsg] = useState("");
+  const [nameInput, setNameInput] = useState("");
+  const [addError, setAddError] = useState("");
+  const [numCourts, setNumCourts] = useState(2);
+  const [hist, setHist] = useState(buildHistory());
+  const [round, setRound] = useState(null);
+  const [roundNum, setRoundNum] = useState(0);
+  const [history, setHistory] = useState([]);
+  const backupInputRef = useRef(null);
+
+  const canGenerate = players.length >= 4 && numCourts >= 1;
+  const maxCourts = Math.max(1, Math.floor(players.length / 4));
+
+  useEffect(() => {
+    setRoster(loadRosterFromStorage());
+  }, []);
+
+  function persistRoster(next) {
+    setRoster(next);
+    saveRosterToStorage(next);
+  }
+
+  function addRosterMember() {
+    const name = nameInput.trim();
+    if (!name) {
+      setAddError("이름을 입력해주세요.");
+      return;
+    }
+    if (roster.some((m) => m.name === name)) {
+      setAddError(`"${name}"은(는) 이미 등록되어 있어요.`);
+      return;
+    }
+    setAddError("");
+    const member = { id: uid(), name };
+    persistRoster([...roster, member]);
+    setPlayers((p) => [
+      ...p,
+      { id: member.id, name: member.name, gamesPlayed: 0, wins: 0, losses: 0 },
+    ]);
+    setNameInput("");
+  }
+
+  function removeRosterMember(id) {
+    persistRoster(roster.filter((m) => m.id !== id));
+    setPlayers((p) => p.filter((x) => x.id !== id));
+  }
+
+  function toggleAttend(member) {
+    setPlayers((p) =>
+      p.some((x) => x.id === member.id)
+        ? p.filter((x) => x.id !== member.id)
+        : [...p, { id: member.id, name: member.name, gamesPlayed: 0, wins: 0, losses: 0 }]
+    );
+  }
+
+  function removePlayer(id) {
+    setPlayers((p) => p.filter((x) => x.id !== id));
+  }
+
+  const backupCode = roster.map((m) => m.name).join(",");
+
+  async function copyBackup() {
+    if (!roster.length) {
+      setCopyMsg("등록된 멤버가 없어요.");
+      return;
+    }
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(backupCode);
+      ok = true;
+    } catch (e) {}
+    if (!ok && backupInputRef.current) {
+      try {
+        backupInputRef.current.focus();
+        backupInputRef.current.select();
+        ok = document.execCommand("copy");
+      } catch (e) {}
+    }
+    setCopyMsg(ok ? "복사됐어요!" : "자동 복사가 안 돼요. 위 박스를 탭해서 직접 복사해주세요.");
+    setTimeout(() => setCopyMsg(""), 3000);
+  }
+
+  function importRoster() {
+    const names = importText.split(",").map((n) => n.trim()).filter(Boolean);
+    if (!names.length) {
+      setImportMsg("붙여넣은 코드가 비어있어요.");
+      return;
+    }
+    const existingNames = new Set(roster.map((m) => m.name));
+    const added = names.filter((n) => !existingNames.has(n)).map((n) => ({ id: uid(), name: n }));
+    if (!added.length) {
+      setImportMsg("이미 다 등록되어 있는 멤버예요.");
+      return;
+    }
+    persistRoster([...roster, ...added]);
+    setImportMsg(`${added.length}명 복원 완료!`);
+    setImportText("");
+    setTimeout(() => setImportMsg(""), 3000);
+  }
+
+  function handleGenerate() {
+    const courts = Math.min(numCourts, maxCourts);
+    const { matches, resting } = generateRound(players, courts, hist);
+    setRound({ matches, resting });
+    setRoundNum((n) => n + 1);
+    setTab("match");
+  }
+
+  function updateScore(matchId, side, value) {
+    if (!/^\d{0,2}$/.test(value)) return;
+    setRound((r) => ({
+      ...r,
+      matches: r.matches.map((m) => (m.id === matchId ? { ...m, [side]: value } : m)),
+    }));
+  }
+
+  function finishMatch(matchId) {
+    setRound((r) => {
+      const m = r.matches.find((x) => x.id === matchId);
+      if (!m || m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB) return r;
+      const aWin = Number(m.scoreA) > Number(m.scoreB);
+
+      setPlayers((ps) =>
+        ps.map((p) => {
+          const inA = m.teamA.some((x) => x.id === p.id);
+          const inB = m.teamB.some((x) => x.id === p.id);
+          if (!inA && !inB) return p;
+          const won = (inA && aWin) || (inB && !aWin);
+          return {
+            ...p,
+            gamesPlayed: p.gamesPlayed + 1,
+            wins: p.wins + (won ? 1 : 0),
+            losses: p.losses + (won ? 0 : 1),
+          };
+        })
+      );
+
+      setHist((h) => {
+        const nh = { partner: { ...h.partner }, opponent: { ...h.opponent } };
+        bump(nh.partner, pKey(m.teamA[0].id, m.teamA[1].id));
+        bump(nh.partner, pKey(m.teamB[0].id, m.teamB[1].id));
+        m.teamA.forEach((a) => m.teamB.forEach((b) => bump(nh.opponent, pKey(a.id, b.id))));
+        return nh;
+      });
+
+      const finished = { ...m, done: true };
+      setHistory((hArr) => [{ ...finished, round: roundNum }, ...hArr]);
+
+      return { ...r, matches: r.matches.map((x) => (x.id === matchId ? finished : x)) };
+    });
+  }
+
+  const allDone = round && round.matches.every((m) => m.done);
+
+  return (
+    <div className="min-h-screen bg-stone-100 text-stone-900 pb-24 font-sans">
+      <header className="sticky top-0 z-10 bg-green-900 text-stone-100 px-5 pt-6 pb-4 shadow-md">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+          <p className="text-[11px] tracking-[0.25em] uppercase text-green-300">Club Session</p>
+        </div>
+        <h1 className="headfont text-2xl uppercase mt-1">배드민턴 랜덤 매칭</h1>
+        <div className="flex gap-4 mt-3 text-sm text-green-200">
+          <span>참석 {players.length}명</span>
+          <span>·</span>
+          <span>코트 {numCourts}면</span>
+          {roundNum > 0 && (
+            <>
+              <span>·</span>
+              <span>{roundNum}라운드 진행</span>
+            </>
+          )}
+        </div>
+      </header>
+
+      {tab === "players" && (
+        <section className="px-5 mt-5 space-y-5">
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold flex items-center gap-1">
+                <Icon>👥</Icon> 고정 멤버
+              </p>
+              <button
+                onClick={() => setManageMode((v) => !v)}
+                className="text-xs text-stone-400 underline underline-offset-2"
+              >
+                {manageMode ? "완료" : "명단 관리"}
+              </button>
+            </div>
+
+            {roster.length === 0 ? (
+              <p className="text-xs text-stone-400 py-2">등록된 멤버가 없어요. 아래에서 이름을 추가해보세요.</p>
+            ) : (
+              <>
+                <p className="text-xs text-stone-400 mb-2">
+                  {manageMode ? "탭하면 명단에서 완전히 삭제돼요." : "탭해서 오늘 참석을 체크하세요."}
+                </p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {roster.map((m) => {
+                    const attending = players.some((p) => p.id === m.id);
+                    return manageMode ? (
+                      <button
+                        key={m.id}
+                        onClick={() => removeRosterMember(m.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-red-50 text-red-500 border border-red-200"
+                      >
+                        {m.name} ✕
+                      </button>
+                    ) : (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleAttend(m)}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition ${
+                          attending
+                            ? "bg-green-700 text-white border-green-700"
+                            : "bg-stone-50 text-stone-500 border-stone-200"
+                        }`}
+                      >
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-2">
+              <input
+                value={nameInput}
+                onChange={(e) => {
+                  setNameInput(e.target.value);
+                  if (addError) setAddError("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && addRosterMember()}
+                placeholder="새 멤버 이름"
+                className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+              />
+              <button
+                onClick={addRosterMember}
+                className="bg-green-700 text-white rounded-xl px-4 flex items-center gap-1 active:scale-95 transition"
+              >
+                + 등록
+              </button>
+            </div>
+            {addError && <p className="text-xs text-red-500 mt-1.5">{addError}</p>}
+
+            <button
+              onClick={() => setShowBackup((v) => !v)}
+              className="text-xs text-green-700 underline underline-offset-2 mt-3"
+            >
+              {showBackup ? "백업/복원 닫기" : "명단 백업/복원하기"}
+            </button>
+
+            {showBackup && (
+              <div className="mt-3 space-y-3 bg-stone-50 rounded-xl p-3 border border-stone-200">
+                <div>
+                  <p className="text-xs font-semibold text-stone-500 mb-1">지금 명단 백업하기</p>
+                  <input
+                    ref={backupInputRef}
+                    readOnly
+                    value={backupCode || "등록된 멤버가 없어요"}
+                    onClick={(e) => e.target.select()}
+                    onFocus={(e) => e.target.select()}
+                    className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-xs scorefont"
+                  />
+                  <button
+                    onClick={copyBackup}
+                    className="mt-2 w-full bg-green-700 text-white rounded-lg py-2 text-xs font-semibold"
+                  >
+                    코드 복사하기
+                  </button>
+                  {copyMsg && <p className="text-xs text-green-700 mt-1">{copyMsg}</p>}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-stone-500 mb-1">코드로 복원하기</p>
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="붙여넣기: 리리,밍크크,철수"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-xs h-16 focus:outline-none focus:ring-2 focus:ring-green-700"
+                  />
+                  <button
+                    onClick={importRoster}
+                    className="mt-2 w-full bg-stone-800 text-white rounded-lg py-2 text-xs font-semibold"
+                  >
+                    복원하기
+                  </button>
+                  {importMsg && <p className="text-xs text-green-700 mt-1">{importMsg}</p>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+            <p className="text-sm font-semibold mb-2">사용할 코트 수</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setNumCourts((n) => Math.max(1, n - 1))}
+                className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
+              >
+                −
+              </button>
+              <span className="scorefont text-xl w-8 text-center">{numCourts}</span>
+              <button
+                onClick={() => setNumCourts((n) => n + 1)}
+                className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
+              >
+                +
+              </button>
+              <span className="text-xs text-stone-400">(최대 {maxCourts || 0}면 · 4명당 1코트)</span>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold mb-2">오늘 참석자 ({players.length}명)</p>
+            {players.length === 0 ? (
+              <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
+                위 고정 멤버를 탭해서 오늘 참석자를 체크해주세요.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {players.map((p) => (
+                  <li
+                    key={p.id}
+                    className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{p.name}</p>
+                      <p className="text-xs text-stone-400 scorefont">
+                        {p.gamesPlayed}경기 · {p.wins}승 {p.losses}패
+                      </p>
+                    </div>
+                    <button onClick={() => removePlayer(p.id)} className="text-red-500">✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <button
+            disabled={!canGenerate}
+            onClick={handleGenerate}
+            className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
+              canGenerate ? "bg-green-700 text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
+            } transition`}
+          >
+            🔀 {roundNum > 0 ? "다음 라운드 매칭 생성" : "매칭 생성하기"}
+          </button>
+          {!canGenerate && (
+            <p className="text-xs text-center text-stone-400 -mt-2">최소 4명 이상 체크해야 매칭할 수 있어요.</p>
+          )}
+        </section>
+      )}
+
+      {tab === "match" && (
+        <section className="px-5 mt-5 space-y-4">
+          {!round ? (
+            <div className="bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300 space-y-3">
+              <p className="text-sm text-stone-400">아직 생성된 매칭이 없어요.</p>
+              <button
+                disabled={!canGenerate}
+                onClick={handleGenerate}
+                className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
+                  canGenerate ? "bg-green-700 text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
+                } transition`}
+              >
+                🔀 매칭 생성하기
+              </button>
+              {!canGenerate && (
+                <p className="text-xs text-stone-400">참석자 탭에서 4명 이상 등록해주세요.</p>
+              )}
+            </div>
+          ) : (
+            <>
+              {round.matches.map((m) => (
+                <div key={m.id} className="bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
+                  <div className="bg-green-700 text-green-100 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
+                    <span>Court {m.court}</span>
+                    {m.done && <span className="text-yellow-400">종료</span>}
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-4 gap-2">
+                    <div className="text-right">
+                      <p className="text-sm font-medium leading-tight">{m.teamA[0].name}</p>
+                      <p className="text-sm font-medium leading-tight">{m.teamA[1].name}</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-px h-4 bg-stone-300" />
+                      <span className="text-[10px] text-stone-400">VS</span>
+                      <div className="w-px h-4 bg-stone-300" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-tight">{m.teamB[0].name}</p>
+                      <p className="text-sm font-medium leading-tight">{m.teamB[1].name}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 pb-4">
+                    <input
+                      disabled={m.done}
+                      value={m.scoreA}
+                      onChange={(e) => updateScore(m.id, "scoreA", e.target.value)}
+                      inputMode="numeric"
+                      placeholder="0"
+                      className="scorefont w-14 h-12 text-center text-xl rounded-xl border border-stone-300 bg-stone-50 disabled:bg-stone-100 disabled:text-stone-400"
+                    />
+                    <span className="text-stone-400">:</span>
+                    <input
+                      disabled={m.done}
+                      value={m.scoreB}
+                      onChange={(e) => updateScore(m.id, "scoreB", e.target.value)}
+                      inputMode="numeric"
+                      placeholder="0"
+                      className="scorefont w-14 h-12 text-center text-xl rounded-xl border border-stone-300 bg-stone-50 disabled:bg-stone-100 disabled:text-stone-400"
+                    />
+                  </div>
+                  {!m.done && (
+                    <button
+                      onClick={() => finishMatch(m.id)}
+                      disabled={m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB}
+                      className="w-full py-2.5 text-sm font-semibold bg-yellow-400 text-green-900 disabled:bg-stone-200 disabled:text-stone-400"
+                    >
+                      경기 종료
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {round.resting.length > 0 && (
+                <div className="bg-stone-100 rounded-2xl p-4 border border-stone-200">
+                  <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">쉬는 중</p>
+                  <p className="text-sm">{round.resting.map((p) => p.name).join(", ")}</p>
+                </div>
+              )}
+
+              {allDone && (
+                <button
+                  onClick={handleGenerate}
+                  className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide bg-green-700 text-white active:scale-[0.98] transition"
+                >
+                  🔀 다음 라운드
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {tab === "record" && (
+        <section className="px-5 mt-5 space-y-5">
+          <div>
+            <p className="text-sm font-semibold mb-2 flex items-center gap-1">🏆 순위</p>
+            <ul className="space-y-2">
+              {[...players]
+                .sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed)
+                .map((p, i) => (
+                  <li
+                    key={p.id}
+                    className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="scorefont text-sm text-stone-400 w-4">{i + 1}</span>
+                      <span className="text-sm font-medium">{p.name}</span>
+                    </div>
+                    <span className="scorefont text-sm text-stone-500">
+                      {p.wins}승 {p.losses}패
+                    </span>
+                  </li>
+                ))}
+              {players.length === 0 && (
+                <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
+                  참석자를 먼저 등록해주세요.
+                </p>
+              )}
+            </ul>
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold mb-2 flex items-center gap-1">📋 경기 기록</p>
+            {history.length === 0 ? (
+              <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
+                아직 종료된 경기가 없어요.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {history.map((m) => (
+                  <li key={m.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 text-sm">
+                    <p className="text-[11px] text-stone-400 mb-1">R{m.round} · Court {m.court}</p>
+                    <div className="flex justify-between items-center">
+                      <span>{m.teamA[0].name}·{m.teamA[1].name}</span>
+                      <span className="scorefont font-semibold">{m.scoreA} : {m.scoreB}</span>
+                      <span>{m.teamB[0].name}·{m.teamB[1].name}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex">
+        {[
+          { key: "players", label: "참석자", emoji: "👥" },
+          { key: "match", label: "매칭", emoji: "🔀" },
+          { key: "record", label: "기록", emoji: "🏆" },
+        ].map(({ key, label, emoji }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex-1 py-3 flex flex-col items-center gap-1 text-xs ${
+              tab === key ? "text-green-700 font-semibold" : "text-stone-400"
+            }`}
+          >
+            <span className="text-lg">{emoji}</span>
+            {label}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
