@@ -230,6 +230,12 @@ function App() {
     RESTWISH_REF.set({ data: {} }).catch(() => {});
   }
 
+  function resetCheckins() {
+    if (!window.confirm("모든 체크인 기록을 초기화할까요? (참석/불참 전부 지워짐)")) return;
+    setRsvp({});
+    CHECKIN_REF.set({ data: {} }).catch(() => {});
+  }
+
   const backupCode = roster.map((m) => m.name).join(",");
 
   async function copyBackup() {
@@ -607,7 +613,14 @@ function App() {
           </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-            <p className="text-sm font-semibold mb-1">오늘 참석 체크인</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold">오늘 참석 체크인</p>
+              {adminOn && (
+                <button onClick={resetCheckins} className="text-[11px] text-red-500 underline underline-offset-2">
+                  체크인 초기화
+                </button>
+              )}
+            </div>
             <p className="text-xs text-stone-400 mb-3">본인 이름 버튼만 눌려요. 실시간으로 다 같이 봐요.</p>
             {!rosterReady ? (
               <p className="text-xs text-stone-400">불러오는 중...</p>
