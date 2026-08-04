@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>회원 관리 | Birdie Club</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="./firebase.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
+<script type="text/babel">
+
+function App() {
+  const { roster, ready, persist } = useRoster();
+  const { adminOn, tryUnlock, lock } = useAdmin();
+  const [search, setSearch] = React.useState("");
+  const [bulkText, setBulkText] = React.useState("");
+  const [addMsg, setAddMsg] = React.useState("");
+
+  function addMembers() {
+    const names = bulkText
+      .split("\n")
+      .map((n) => n.trim())
+      .filter(Boolean);
+    if (!names.length) {
+      setAddMsg("이름을 한 줄에 한 명씩 입력해주세요.");
+      return;
+    }
+    const existingNames = new Set(roster.map((m) => m.name));
+    const uniqueNew = [...new Set(names)].filter((n) => !existingNames.has(n));
+    if (!uniqueNew.length) {
+      setAddMsg("이미 모두 등록되어 있는 이름이에요.");
+      return;
+    }
+    const added = uniqueNew.map((name) => ({
+      id: uid(), name, grade: "신입회원", joinedAt: todayStr(), birthday: "",
+    }));
+    persist([...roster, ...added]);
+    setAddMsg(`${added.length}명이 새로 등록됐어요! 🌱`);
+    setBulkText("");
+    setTimeout(() => setAddMsg(""), 3000);
+  }
+
+  function updateGrade(id, grade) {
+    persist(roster.map((m) => (m.id === id ? { ...m, grade } : m)));
+  }
+
+  function updateBirthday(id, birthday) {
+    persist(roster.map((m) => (m.id === id ? { ...m, birthday } : m)));
+  }
+
+  function removeMember(id, name) {
+    if (!window.confirm(`"${name}" 회원을 명단에서 삭제할까요? 이 작업은 되돌릴 수 없어요.`)) return;
+    persist(roster.filter((m) => m.id !== id));
+  }
+
+  const filtered = roster.filter((m) => m.name.toLowerCase().includes(search.trim().toLowerCase()));
+  const grouped = window.GRADES.map((g) => ({
+    ...g,
+    members: filtered.filter((m) => (m.grade || "일반회원") === g.key),
+  }));
+
+  return (
+    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+      <TopHeader title="👥 회원 관리" subtitle="버디클럽 멤버 명단을 확인하고 관리해요" />
+
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <div className="flex items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="🔍 이름으로 검색"
+            className="flex-1 rounded-xl border border-stone-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+          <button
+            onClick={adminOn ? lock : () => tryUnlock()}
+            className={`text-[11px] px-3 py-2.5 rounded-xl border whitespace-nowrap ${adminOn ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
+            style={adminOn ? { backgroundColor: "#4CAF50" } : {}}
+          >
+            {adminOn ? "🔓 관리자" : "🔒 관리자"}
+          </button>
+        </div>
+      </section>
+
+      {/* member groups */}
+      <section className="px-5 max-w-2xl mx-auto mb-6 space-y-6">
+        {!ready ? (
+          <>
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
+            {search ? "검색 결과가 없어요." : "등록된 회원이 없어요. 아래에서 추가해보세요."}
+          </p>
+        ) : (
+          grouped.map((g) => g.members.length > 0 && (
+            <div key={g.key}>
+              <p className="text-xs font-bold text-stone-500 mb-2">{g.emoji} {g.key} ({g.members.length})</p>
+              <ul className="space-y-2">
+                {g.members.map((m) => (
+                  <li key={m.id} className="rise-in bg-white rounded-xl px-4 py-3 border border-stone-200 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-stone-800">{m.name}</p>
+                        <div className="mt-1"><GradeBadge grade={m.grade} /></div>
+                      </div>
+                      {adminOn && (
+                        <button onClick={() => removeMember(m.id, m.name)} className="text-red-400 text-xs">삭제</button>
+                      )}
+                    </div>
+                    {adminOn && (
+                      <div className="mt-3 pt-3 border-t border-stone-100 flex items-center gap-2 flex-wrap">
+                        <select
+                          value={m.grade || "일반회원"}
+                          onChange={(e) => updateGrade(m.id, e.target.value)}
+                          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5"
+                        >
+                          {window.GRADES.map((gr) => (
+                            <option key={gr.key} value={gr.key}>{gr.emoji} {gr.key}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={m.birthday || ""}
+                          onChange={(e) => updateBirthday(m.id, e.target.value)}
+                          placeholder="생일 MM-DD"
+                          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 w-28"
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        )}
+      </section>
+
+      {/* add members */}
+      <section className="px-5 max-w-2xl mx-auto mb-8">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <p className="text-sm font-semibold mb-1">➕ 회원 추가</p>
+          <p className="text-xs text-stone-400 mb-2">한 줄에 이름 한 명씩 입력하세요. 여러 명을 한 번에 등록할 수 있어요.</p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => { setBulkText(e.target.value); if (addMsg) setAddMsg(""); }}
+            placeholder={"감자\n포도\n사과"}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm h-24 focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+          <button
+            onClick={addMembers}
+            className="mt-2 w-full text-white rounded-lg py-2.5 text-sm font-semibold tap-scale"
+            style={{ backgroundColor: "#4CAF50" }}
+          >
+            등록하기
+          </button>
+          {addMsg && <p className="text-xs mt-1.5" style={{ color: "#4CAF50" }}>{addMsg}</p>}
+        </div>
+      </section>
+
+      <BottomNav active="members" />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

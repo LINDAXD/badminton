@@ -1,0 +1,140 @@
+// app.js — Birdie Club 공통 React 컴포넌트 & 훅
+// 이 파일은 <script type="text/babel" src="./app.js"></script> 로 각 페이지에서 공유됩니다.
+const { useState, useEffect } = React;
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function fmtDate(d) {
+  if (!d) return "";
+  const [y, m, day] = d.split("-");
+  return `${y}.${m}.${day}`;
+}
+
+function gradeInfo(grade) {
+  return (window.GRADES && window.GRADES.find((g) => g.key === grade)) || window.GRADES[2];
+}
+
+// ---------- 관리자 잠금 훅 ----------
+function useAdmin() {
+  const [adminOn, setAdminOn] = useState(() => localStorage.getItem("bm_admin") === "1");
+  function tryUnlock(cb) {
+    if (adminOn) { if (cb) cb(); return; }
+    const pin = window.prompt("관리자 비밀번호를 입력하세요");
+    if (pin === window.ADMIN_PIN) {
+      localStorage.setItem("bm_admin", "1");
+      setAdminOn(true);
+      if (cb) cb();
+    } else if (pin !== null) {
+      window.alert("비밀번호가 틀렸어요.");
+    }
+  }
+  function lock() {
+    localStorage.removeItem("bm_admin");
+    setAdminOn(false);
+  }
+  return { adminOn, tryUnlock, lock };
+}
+
+// ---------- 로그인(내 신원) 훅 ----------
+function useIdentity() {
+  const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
+  const [myName, setMyName] = useState(() => localStorage.getItem("bm_myName") || null);
+  function login(id, name) {
+    localStorage.setItem("bm_myId", id);
+    localStorage.setItem("bm_myName", name);
+    setMyId(id);
+    setMyName(name);
+  }
+  function logout() {
+    localStorage.removeItem("bm_myId");
+    localStorage.removeItem("bm_myName");
+    setMyId(null);
+    setMyName(null);
+  }
+  return { myId, myName, login, logout };
+}
+
+// ---------- 회원 명단 실시간 훅 ----------
+function useRoster() {
+  const [roster, setRoster] = useState([]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const unsub = window.REFS.roster.onSnapshot((snap) => {
+      const data = snap.data();
+      setRoster(data && data.members ? data.members : []);
+      setReady(true);
+    }, () => setReady(true));
+    return () => unsub();
+  }, []);
+  function persist(next) {
+    setRoster(next);
+    window.REFS.roster.set({ members: next }).catch(() => {});
+  }
+  return { roster, ready, setRoster, persist };
+}
+
+// ---------- 출석 이력 기록 (출석왕 계산용, 하루 1회만 기록) ----------
+function logAttendance(memberId) {
+  if (!memberId) return;
+  const today = todayStr();
+  REFS.checkinlog.get().then((snap) => {
+    const data = snap.data() || {};
+    const items = data.items || [];
+    const already = items.some((it) => it.memberId === memberId && it.date === today);
+    if (already) return;
+    REFS.checkinlog.set({ items: [...items, { id: uid(), memberId, date: today }] }).catch(() => {});
+  }).catch(() => {});
+}
+
+// ---------- 하단 고정 내비게이션 ----------
+function BottomNav({ active }) {
+  const items = [
+    { key: "home", href: "./index.html", icon: "🏠", label: "홈" },
+    { key: "members", href: "./members.html", icon: "👥", label: "회원" },
+    { key: "match", href: "./match.html", icon: "🎲", label: "랜덤매칭" },
+    { key: "notices", href: "./notices.html", icon: "📢", label: "공지" },
+    { key: "more", href: "./more.html", icon: "☰", label: "더보기" },
+  ];
+  return (
+    <nav className="bc-bottomnav">
+      {items.map((it) => (
+        <a key={it.key} href={it.href} className={active === it.key ? "active" : ""}>
+          <span className="icon">{it.icon}</span>
+          {it.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+// ---------- 상단 헤더 (공용) ----------
+function TopHeader({ title, subtitle }) {
+  return (
+    <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
+      <a href="./index.html" className="headfont text-base" style={{ color: "#4CAF50" }}>🏸 Birdie Club</a>
+      {title && <h1 className="headfont text-2xl text-stone-900 mt-2">{title}</h1>}
+      {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
+    </header>
+  );
+}
+
+// ---------- 등급 배지 ----------
+function GradeBadge({ grade }) {
+  const g = gradeInfo(grade);
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${g.color}`}>
+      {g.emoji} {g.key}
+    </span>
+  );
+}
+
+// ---------- 로딩 스켈레톤 ----------
+function Skeleton({ className }) {
+  return <div className={`shimmer rounded-xl ${className || "h-16 w-full"}`} />;
+}

@@ -3,102 +3,57 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>왕초보 배드민턴 모임 | 2030 안산</title>
+<title>Birdie Club | 혼자보다 함께, 버디클럽</title>
 <link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- Firebase (same project as the matching app, new "notices" doc) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyDn5tgqFHAKNbiSBwxyrxyhKgFR9w1jf8E",
-    authDomain: "badminton-42968.firebaseapp.com",
-    projectId: "badminton-42968",
-    storageBucket: "badminton-42968.firebasestorage.app",
-    messagingSenderId: "1079190230967",
-    appId: "1:1079190230967:web:82c8c22b7f84fa5ea23a32"
-  };
-  firebase.initializeApp(firebaseConfig);
-  window.db = firebase.firestore();
-</script>
-
-<style>
-  body { margin: 0; }
-  .headfont { font-family: 'Arial Black', 'Helvetica Neue', sans-serif; letter-spacing: -0.01em; }
-  @keyframes floaty { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-8px);} }
-  .floaty { animation: floaty 3.2s ease-in-out infinite; }
-</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="./firebase.js"></script>
 </head>
 <body>
 <div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
 <script type="text/babel">
-const { useState, useEffect } = React;
-const db = window.db;
-const NOTICE_REF = db.collection("badminton").doc("notices");
-const ROSTER_REF = db.collection("badminton").doc("roster");
-const uid = () => Math.random().toString(36).slice(2, 9);
+const QUOTES = [
+  "실수해도 괜찮아요, 오늘도 나가서 뛰는 게 승리예요.",
+  "라켓을 처음 잡던 그날의 설렘을 기억하세요.",
+  "혼자 치는 스매시보다, 함께 웃는 랠리가 더 오래 남아요.",
+  "잘 치는 것보다 즐겁게 치는 게 먼저예요.",
+  "오늘 흘린 땀이 다음 랠리를 더 즐겁게 만들어줘요.",
+  "같이 뛰는 사람이 있다는 것, 그게 버디클럽이에요.",
+];
+function quoteOfToday() {
+  const day = new Date().getDate();
+  return QUOTES[day % QUOTES.length];
+}
 
 function App() {
-  const [notices, setNotices] = useState([]);
-  const [noticesReady, setNoticesReady] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const { myId, myName, login, logout } = useIdentity();
+  const { roster } = useRoster();
+  const [loginInput, setLoginInput] = React.useState("");
+  const [loginMsg, setLoginMsg] = React.useState("");
+  const [rsvp, setRsvp] = React.useState({});
+  const [notices, setNotices] = React.useState([]);
+  const [noticesReady, setNoticesReady] = React.useState(false);
+  const [schedule, setSchedule] = React.useState([]);
+  const [checkedInMsg, setCheckedInMsg] = React.useState("");
 
-  // ---- login / auto-registration ----
-  const [roster, setRoster] = useState([]);
-  const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
-  const [myName, setMyName] = useState(() => localStorage.getItem("bm_myName") || null);
-  const [loginInput, setLoginInput] = useState("");
-  const [loginMsg, setLoginMsg] = useState("");
-
-  useEffect(() => {
-    const unsub = ROSTER_REF.onSnapshot((snap) => {
+  React.useEffect(() => {
+    const unsub = REFS.checkin.onSnapshot((snap) => {
       const data = snap.data();
-      setRoster(data && data.members ? data.members : []);
+      setRsvp(data && data.data ? data.data : {});
     });
     return () => unsub();
   }, []);
 
-  function login() {
-    const name = loginInput.trim();
-    if (!name) {
-      setLoginMsg("이름을 입력해주세요.");
-      return;
-    }
-    const existing = roster.find((m) => m.name === name);
-    if (existing) {
-      localStorage.setItem("bm_myId", existing.id);
-      localStorage.setItem("bm_myName", existing.name);
-      setMyId(existing.id);
-      setMyName(existing.name);
-    } else {
-      const member = { id: uid(), name };
-      const next = [...roster, member];
-      setRoster(next);
-      ROSTER_REF.set({ members: next }).catch(() => {});
-      localStorage.setItem("bm_myId", member.id);
-      localStorage.setItem("bm_myName", member.name);
-      setMyId(member.id);
-      setMyName(member.name);
-      setLoginMsg("새 멤버로 등록됐어요, 환영해요!");
-    }
-    setLoginInput("");
-  }
-
-  function logout() {
-    localStorage.removeItem("bm_myId");
-    localStorage.removeItem("bm_myName");
-    setMyId(null);
-    setMyName(null);
-  }
-
-  useEffect(() => {
-    const unsub = NOTICE_REF.onSnapshot((snap) => {
+  React.useEffect(() => {
+    const unsub = REFS.notices.onSnapshot((snap) => {
       const data = snap.data();
       setNotices(data && data.items ? data.items : []);
       setNoticesReady(true);
@@ -106,66 +61,94 @@ function App() {
     return () => unsub();
   }, []);
 
-  function addNotice() {
-    if (!title.trim()) return;
-    const item = {
-      id: uid(),
-      title: title.trim(),
-      body: body.trim(),
-      date: new Date().toISOString().slice(0, 10),
-    };
-    const next = [item, ...notices];
-    setNotices(next);
-    NOTICE_REF.set({ items: next }).catch(() => {});
-    setTitle("");
-    setBody("");
+  React.useEffect(() => {
+    const unsub = REFS.schedule.onSnapshot((snap) => {
+      const data = snap.data();
+      setSchedule(data && data.items ? data.items : []);
+    });
+    return () => unsub();
+  }, []);
+
+  function doLogin() {
+    const name = loginInput.trim();
+    if (!name) { setLoginMsg("이름을 입력해주세요."); return; }
+    const existing = roster.find((m) => m.name === name);
+    if (existing) {
+      login(existing.id, existing.name);
+    } else {
+      const member = { id: uid(), name, grade: "신입회원", joinedAt: todayStr(), birthday: "" };
+      const next = [...roster, member];
+      REFS.roster.set({ members: next }).catch(() => {});
+      login(member.id, member.name);
+      setLoginMsg("새 멤버로 등록됐어요, 환영해요! 🌱");
+    }
+    setLoginInput("");
   }
 
-  function removeNotice(id) {
-    const next = notices.filter((n) => n.id !== id);
-    setNotices(next);
-    NOTICE_REF.set({ items: next }).catch(() => {});
+  function checkInNow() {
+    if (!myId) {
+      document.getElementById("login")?.scrollIntoView({ behavior: "smooth" });
+      setLoginMsg("먼저 이름으로 입장해주세요.");
+      return;
+    }
+    const next = { ...rsvp, [myId]: "in" };
+    setRsvp(next);
+    REFS.checkin.set({ data: next }).catch(() => {});
+    logAttendance(myId);
+    setCheckedInMsg("참석 체크 완료! 오늘 만나요 🏸");
+    setTimeout(() => setCheckedInMsg(""), 2500);
   }
+
+  const attendCount = Object.values(rsvp).filter((v) => v === "in").length;
+  const pinned = notices.find((n) => n.pinned);
+  const preview = pinned || notices[0];
+  const upcoming = [...schedule]
+    .filter((s) => s.date >= todayStr())
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
 
   return (
-    <div className="min-h-screen bg-[#FFF9F2] text-stone-800 font-sans">
-
-      {/* nav */}
-      <nav className="flex items-center justify-between px-5 py-4 max-w-2xl mx-auto">
-        <span className="headfont text-lg text-teal-700">🏸 셔틀런</span>
+    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+      {/* top */}
+      <header className="px-5 pt-7 pb-2 max-w-2xl mx-auto flex items-center justify-between">
+        <span className="headfont text-lg" style={{ color: "#4CAF50" }}>🏸 Birdie Club</span>
         {myId ? (
-          <a
-            href="./match.html"
-            className="text-xs bg-teal-600 text-white rounded-full px-3 py-1.5 font-medium"
-          >
-            {myName}님 · 매칭 앱
-          </a>
+          <button onClick={logout} className="text-xs bg-stone-50 border border-stone-200 text-stone-500 rounded-full px-3 py-1.5 font-medium">
+            {myName}님 · 로그아웃
+          </button>
         ) : (
-          <a
-            href="#login"
-            className="text-xs bg-white border border-teal-200 text-teal-700 rounded-full px-3 py-1.5 font-medium"
-          >
+          <a href="#login" className="text-xs bg-white border rounded-full px-3 py-1.5 font-medium" style={{ borderColor: "#4CAF50", color: "#4CAF50" }}>
             로그인
           </a>
         )}
-      </nav>
+      </header>
+
+      {/* hero */}
+      <section className="px-5 pt-4 pb-6 max-w-2xl mx-auto text-center">
+        <div className="text-6xl mb-3 floaty">🏸</div>
+        <h1 className="headfont text-3xl leading-snug text-stone-900">
+          혼자보다 함께,<br />
+          <span style={{ color: "#4CAF50" }}>버디클럽</span>
+        </h1>
+        <p className="text-stone-400 mt-2 text-sm">오늘도 같이 뛰어요, 우리 클럽 Birdie Club</p>
+
+        <div className="flex gap-2 justify-center mt-6">
+          <button onClick={checkInNow} className="tap-scale text-white text-sm font-bold px-6 py-3 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
+            ✋ 참석하기
+          </button>
+          <a href="./match.html" className="tap-scale text-sm font-bold px-6 py-3 rounded-full border" style={{ borderColor: "#FFD54F", color: "#B98900", backgroundColor: "#FFFBEA" }}>
+            🎲 랜덤매칭
+          </a>
+        </div>
+        {checkedInMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{checkedInMsg}</p>}
+      </section>
 
       {/* login card */}
-      <section id="login" className="px-5 max-w-2xl mx-auto mb-6">
+      <section id="login" className="px-5 max-w-2xl mx-auto mb-5">
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
           {myId ? (
             <div className="flex items-center justify-between">
-              <p className="text-sm">
-                <span className="font-bold text-teal-700">{myName}</span>님으로 로그인됨
-              </p>
-              <div className="flex items-center gap-3">
-                <a href="./match.html" className="text-xs bg-teal-600 text-white rounded-full px-3 py-1.5 font-semibold">
-                  매칭 앱 입장
-                </a>
-                <button onClick={logout} className="text-xs text-stone-400 underline underline-offset-2">
-                  로그아웃
-                </button>
-              </div>
+              <p className="text-sm"><span className="font-bold" style={{ color: "#4CAF50" }}>{myName}</span>님으로 로그인됨</p>
+              <button onClick={logout} className="text-xs text-stone-400 underline underline-offset-2">로그아웃</button>
             </div>
           ) : (
             <>
@@ -174,199 +157,66 @@ function App() {
               <div className="flex gap-2">
                 <input
                   value={loginInput}
-                  onChange={(e) => {
-                    setLoginInput(e.target.value);
-                    if (loginMsg) setLoginMsg("");
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && login()}
+                  onChange={(e) => { setLoginInput(e.target.value); if (loginMsg) setLoginMsg(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && doLogin()}
                   placeholder="이름 입력"
-                  className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                  style={{ "--tw-ring-color": "#4CAF50" }}
                 />
-                <button onClick={login} className="bg-teal-600 text-white rounded-xl px-4 text-sm font-semibold active:scale-95 transition">
-                  입장
-                </button>
+                <button onClick={doLogin} className="text-white rounded-xl px-4 text-sm font-semibold tap-scale" style={{ backgroundColor: "#4CAF50" }}>입장</button>
               </div>
-              {loginMsg && <p className="text-xs text-teal-700 mt-1.5">{loginMsg}</p>}
+              {loginMsg && <p className="text-xs mt-1.5" style={{ color: "#4CAF50" }}>{loginMsg}</p>}
             </>
           )}
         </div>
       </section>
 
-      {/* hero */}
-      <section className="px-5 pt-2 pb-10 max-w-2xl mx-auto text-center">
-        <div className="text-6xl mb-4 floaty">🏸</div>
-        <p className="inline-block bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1 rounded-full mb-3">
-          왕초보 환영 · 텃세 없음
-        </p>
-        <h1 className="headfont text-3xl leading-snug text-stone-900">
-          2030 배드민턴 모임<br />
-          <span className="text-teal-600">셔틀런</span>
-        </h1>
-        <p className="text-stone-500 mt-3 text-sm leading-relaxed">
-          라켓 처음 잡아봐도 괜찮아요.<br />
-          같이 웃고, 같이 뛰고, 같이 늘어요.
-        </p>
-        <div className="flex gap-2 justify-center mt-6">
-          <a
-            href="#join"
-            className="bg-teal-600 text-white text-sm font-bold px-6 py-3 rounded-full shadow-sm shadow-teal-200 active:scale-95 transition"
-          >
-            가입 신청하기
-          </a>
-          <a
-            href="#info"
-            className="bg-white text-teal-700 text-sm font-bold px-6 py-3 rounded-full border border-teal-200 active:scale-95 transition"
-          >
-            모임 정보 보기
-          </a>
+      {/* quick cards */}
+      <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
+        <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
+          <p className="text-[11px] text-stone-400 mb-1">오늘 참석 인원</p>
+          <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{attendCount}<span className="text-sm text-stone-400 font-normal">명</span></p>
+        </div>
+        <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
+          <p className="text-[11px] text-stone-400 mb-1">다음 모임</p>
+          {upcoming ? (
+            <>
+              <p className="text-sm font-bold text-stone-800">{fmtDate(upcoming.date)}</p>
+              <p className="text-[11px] text-stone-400 truncate">{upcoming.title}</p>
+            </>
+          ) : (
+            <p className="text-sm text-stone-400">일정 준비 중</p>
+          )}
         </div>
       </section>
 
-      {/* intro cards */}
-      <section className="px-5 max-w-2xl mx-auto grid grid-cols-3 gap-3 mb-10">
-        {[
-          { emoji: "🐣", title: "왕초보 환영", desc: "라켓 처음도 OK" },
-          { emoji: "🤝", title: "텃세 없어요", desc: "다 같이 배워요" },
-          { emoji: "😄", title: "즐기는 게 목표", desc: "승부보다 재미" },
-        ].map((c) => (
-          <div key={c.title} className="bg-white rounded-2xl p-4 text-center shadow-sm border border-stone-100">
-            <div className="text-2xl mb-1">{c.emoji}</div>
-            <p className="text-xs font-bold text-stone-800">{c.title}</p>
-            <p className="text-[11px] text-stone-400 mt-0.5">{c.desc}</p>
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <a href="./notices.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] text-stone-400">📢 공지사항</p>
+            <span className="text-[11px] text-stone-300">더보기 &gt;</span>
           </div>
-        ))}
+          {!noticesReady ? (
+            <Skeleton className="h-5 w-2/3" />
+          ) : preview ? (
+            <p className="text-sm font-bold text-stone-800 truncate">
+              {preview.pinned && <span className="mr-1" style={{ color: "#FFD54F" }}>📌</span>}
+              {preview.title}
+            </p>
+          ) : (
+            <p className="text-sm text-stone-400">아직 등록된 공지가 없어요.</p>
+          )}
+        </a>
       </section>
 
-      {/* operations info */}
-      <section id="info" className="px-5 max-w-2xl mx-auto mb-10">
-        <h2 className="headfont text-lg text-stone-900 mb-3">📋 운영 안내</h2>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 space-y-4">
-          <div className="flex gap-3">
-            <span className="text-xl">📍</span>
-            <div>
-              <p className="text-xs text-stone-400">장소</p>
-              <p className="text-sm font-semibold text-stone-800">안산 중앙공원 배드민턴장</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-xl">🎂</span>
-            <div>
-              <p className="text-xs text-stone-400">연령대</p>
-              <p className="text-sm font-semibold text-stone-800">20~30대</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-xl">🗓️</span>
-            <div>
-              <p className="text-xs text-stone-400">정기 모임</p>
-              <p className="text-sm font-semibold text-stone-800">매주 정기 모임 진행 (일정은 공지 참고)</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <span className="text-xl">🙋</span>
-            <div>
-              <p className="text-xs text-stone-400">참여 방식</p>
-              <p className="text-sm font-semibold text-stone-800">가입 신청 후 운영진 승인 → 밴드/체크인으로 참석 안내</p>
-            </div>
-          </div>
+      <section className="px-5 max-w-2xl mx-auto mb-8">
+        <div className="rise-in rounded-2xl p-4 text-center" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
+          <p className="text-[11px] font-bold mb-1" style={{ color: "#B98900" }}>💬 오늘의 한마디</p>
+          <p className="text-sm text-stone-700 leading-relaxed">{quoteOfToday()}</p>
         </div>
       </section>
 
-      {/* gear checklist */}
-      <section className="px-5 max-w-2xl mx-auto mb-10">
-        <h2 className="headfont text-lg text-stone-900 mb-3">🎒 준비물</h2>
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { emoji: "🏸", label: "배드민턴 라켓" },
-            { emoji: "👟", label: "실내 배드민턴화" },
-            { emoji: "🪶", label: "셔틀콕" },
-          ].map((g) => (
-            <div key={g.label} className="bg-teal-50 rounded-2xl p-4 text-center border border-teal-100">
-              <div className="text-2xl mb-1">{g.emoji}</div>
-              <p className="text-xs font-semibold text-teal-800">{g.label}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-[11px] text-stone-400 text-center mt-2">라켓이 없어도 처음 몇 번은 대여 가능해요 🙌</p>
-      </section>
-
-      {/* notice board */}
-      <section className="px-5 max-w-2xl mx-auto mb-10">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="headfont text-lg text-stone-900">📣 공지사항</h2>
-          <button
-            onClick={() => setShowAdmin((v) => !v)}
-            className="text-[11px] text-stone-400 underline underline-offset-2"
-          >
-            {showAdmin ? "닫기" : "운영진 글쓰기"}
-          </button>
-        </div>
-
-        {showAdmin && (
-          <div className="bg-white rounded-2xl p-4 mb-3 border border-stone-200 space-y-2">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="공지 제목 (예: 이번주 셔틀콕 안내)"
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
-            />
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="내용 (선택)"
-              className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm h-20"
-            />
-            <button
-              onClick={addNotice}
-              className="w-full bg-teal-600 text-white rounded-lg py-2 text-sm font-semibold"
-            >
-              공지 올리기
-            </button>
-          </div>
-        )}
-
-        {!noticesReady ? (
-          <p className="text-xs text-stone-400 text-center py-4">불러오는 중...</p>
-        ) : notices.length === 0 ? (
-          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
-            아직 등록된 공지가 없어요.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {notices.map((n) => (
-              <li key={n.id} className="bg-white rounded-xl p-4 border border-stone-100 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-bold text-stone-800">{n.title}</p>
-                    {n.body && <p className="text-xs text-stone-500 mt-1 whitespace-pre-wrap">{n.body}</p>}
-                  </div>
-                  {showAdmin && (
-                    <button onClick={() => removeNotice(n.id)} className="text-red-400 text-xs shrink-0">삭제</button>
-                  )}
-                </div>
-                <p className="text-[10px] text-stone-300 mt-2">{n.date}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* join CTA footer */}
-      <section id="join" className="px-5 max-w-2xl mx-auto pb-16">
-        <div className="bg-teal-600 rounded-3xl p-7 text-center text-white">
-          <p className="text-xl headfont mb-1">같이 배워요 🏸</p>
-          <p className="text-sm text-teal-50 mb-5">처음이라도 괜찮아요, 편하게 놀러 오세요</p>
-          <a
-            href="https://open.kakao.com/"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block bg-white text-teal-700 font-bold text-sm px-8 py-3 rounded-full active:scale-95 transition"
-          >
-            카톡 오픈채팅으로 문의하기
-          </a>
-          <p className="text-[11px] text-teal-100 mt-3">* 링크는 운영진이 실제 오픈채팅 주소로 교체해주세요</p>
-        </div>
-      </section>
+      <BottomNav active="home" />
     </div>
   );
 }

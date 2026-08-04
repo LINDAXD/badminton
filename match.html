@@ -3,46 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>배드민턴 랜덤 매칭</title>
+<title>랜덤매칭 | Birdie Club</title>
 <link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
 
-<!-- Firebase (compat SDK, no build tools needed) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyDn5tgqFHAKNbiSBwxyrxyhKgFR9w1jf8E",
-    authDomain: "badminton-42968.firebaseapp.com",
-    projectId: "badminton-42968",
-    storageBucket: "badminton-42968.firebasestorage.app",
-    messagingSenderId: "1079190230967",
-    appId: "1:1079190230967:web:82c8c22b7f84fa5ea23a32"
-  };
-  firebase.initializeApp(firebaseConfig);
-  window.db = firebase.firestore();
-</script>
-
-<style>
-  body { margin: 0; }
-  .scorefont { font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-variant-numeric: tabular-nums; }
-  .headfont { font-family: 'Arial Black', 'Helvetica Neue', sans-serif; letter-spacing: 0.03em; }
-</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="./firebase.js"></script>
 </head>
 <body>
 <div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 const db = window.db;
-const ROSTER_REF = db.collection("badminton").doc("roster");
-const CHECKIN_REF = db.collection("badminton").doc("checkin");
-const RESTWISH_REF = db.collection("badminton").doc("restwish");
+const ROSTER_REF = window.REFS.roster;
+const CHECKIN_REF = window.REFS.checkin;
+const RESTWISH_REF = window.REFS.restwish;
 
 // ---------- helpers ----------
-const uid = () => Math.random().toString(36).slice(2, 9);
 const pKey = (a, b) => [a, b].sort().join("|");
 
 function buildHistory() {
@@ -140,7 +124,7 @@ function App() {
   const [restWish, setRestWish] = useState({});
   const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
   const [adminOn, setAdminOn] = useState(() => localStorage.getItem("bm_admin") === "1");
-  const ADMIN_PIN = "1234";
+  const ADMIN_PIN = window.ADMIN_PIN;
 
   const canGenerate = players.length >= 4 && numCourts >= 1;
   const maxCourts = Math.max(1, Math.floor(players.length / 4));
@@ -215,6 +199,7 @@ function App() {
     const next = { ...rsvp, [memberId]: status };
     setRsvp(next);
     CHECKIN_REF.set({ data: next }).catch(() => {});
+    if (status === "in") logAttendance(memberId);
   }
 
   function toggleRestWish(memberId) {
@@ -314,6 +299,8 @@ function App() {
     setPlayers((p) => p.filter((x) => x.id !== id));
   }
 
+  const [justShuffled, setJustShuffled] = useState(false);
+
   function handleGenerate() {
     if (!adminOn) {
       tryAdminUnlock();
@@ -326,6 +313,8 @@ function App() {
     setRoundNum((n) => n + 1);
     setTab("match");
     clearRestWish();
+    setJustShuffled(true);
+    setTimeout(() => setJustShuffled(false), 500);
   }
 
   function updateScore(matchId, side, value) {
@@ -376,23 +365,24 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 pb-24 font-sans">
-      <header className="sticky top-0 z-10 bg-green-900 text-stone-100 px-5 pt-6 pb-4 shadow-md">
+      <header className="sticky top-0 z-10 text-white px-5 pt-6 pb-4 shadow-md" style={{ backgroundColor: "#4CAF50" }}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-            <p className="text-[11px] tracking-[0.25em] uppercase text-green-300">Club Session</p>
-          </div>
+          <a href="./index.html" className="flex items-center gap-2 text-white/90">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#FFD54F" }} />
+            <p className="text-[11px] tracking-[0.25em] uppercase">Birdie Club</p>
+          </a>
           <button
             onClick={adminOn ? adminLock : tryAdminUnlock}
             className={`text-[10px] px-2.5 py-1 rounded-full border ${
-              adminOn ? "bg-yellow-400 text-green-900 border-yellow-400" : "bg-green-800 text-green-200 border-green-700"
+              adminOn ? "text-green-900 border-transparent" : "bg-white/10 text-white border-white/30"
             }`}
+            style={adminOn ? { backgroundColor: "#FFD54F" } : {}}
           >
             {adminOn ? "🔓 관리자" : "🔒 관리자 잠김"}
           </button>
         </div>
-        <h1 className="headfont text-2xl uppercase mt-1">배드민턴 랜덤 매칭</h1>
-        <div className="flex gap-4 mt-3 text-sm text-green-200">
+        <h1 className="headfont text-2xl uppercase mt-1">🎲 랜덤매칭</h1>
+        <div className="flex gap-4 mt-3 text-sm text-white/90">
           <span>참석 {players.length}명</span>
           <span>·</span>
           <span>코트 {numCourts}면</span>
@@ -680,7 +670,7 @@ function App() {
                 onClick={handleGenerate}
                 className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
                   canGenerate ? "bg-green-700 text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
-                } transition`}
+                } transition ${justShuffled ? "shuffle-pulse" : ""}`}
               >
                 🔀 매칭 생성하기 {!adminOn && "🔒"}
               </button>
@@ -689,7 +679,7 @@ function App() {
           ) : (
             <>
               {round.matches.map((m) => (
-                <div key={m.id} className="bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
+                <div key={m.id} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
                   <div className="bg-green-700 text-green-100 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
                     <span>Court {m.court}</span>
                     {m.done && <span className="text-yellow-400">종료</span>}

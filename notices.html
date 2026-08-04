@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>공지사항 | Birdie Club</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="./firebase.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
+<script type="text/babel">
+
+function NoticeCard({ n, adminOn, myName, onRemove, onDeletePhoto }) {
+  const [open, setOpen] = React.useState(false);
+  const [commentText, setCommentText] = React.useState("");
+  const likedKey = `bm_liked_${n.id}`;
+  const [liked, setLiked] = React.useState(() => localStorage.getItem(likedKey) === "1");
+  const likeCount = (n.likes || []).length;
+
+  function toggleLike() {
+    const items_ref = REFS.notices;
+    items_ref.get().then((snap) => {
+      const data = snap.data() || {};
+      const items = data.items || [];
+      const next = items.map((it) => {
+        if (it.id !== n.id) return it;
+        const likes = it.likes || [];
+        if (liked) {
+          return { ...it, likes: likes.filter((_, i) => i !== 0) }; // remove one like token
+        }
+        return { ...it, likes: [...likes, uid()] };
+      });
+      items_ref.set({ items: next }).catch(() => {});
+    });
+    if (liked) { localStorage.removeItem(likedKey); setLiked(false); }
+    else { localStorage.setItem(likedKey, "1"); setLiked(true); }
+  }
+
+  function addComment() {
+    const text = commentText.trim();
+    if (!text) return;
+    const comment = { id: uid(), name: myName || "손님", text, date: todayStr() };
+    REFS.notices.get().then((snap) => {
+      const data = snap.data() || {};
+      const items = data.items || [];
+      const next = items.map((it) => it.id === n.id ? { ...it, comments: [...(it.comments || []), comment] } : it);
+      REFS.notices.set({ items: next }).catch(() => {});
+    });
+    setCommentText("");
+  }
+
+  return (
+    <li className="rise-in bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-stone-800">
+              {n.pinned && <span className="mr-1">📌</span>}{n.title}
+            </p>
+            {n.body && <p className="text-xs text-stone-500 mt-1 whitespace-pre-wrap">{n.body}</p>}
+          </div>
+          {adminOn && (
+            <button onClick={() => onRemove(n.id)} className="text-red-400 text-xs shrink-0">삭제</button>
+          )}
+        </div>
+
+        {n.photoUrl && (
+          <div className="mt-3 relative">
+            <img src={n.photoUrl} alt="공지 사진" className="rounded-xl w-full max-h-64 object-cover" />
+            {adminOn && (
+              <button
+                onClick={() => onDeletePhoto(n.id, n.photoUrl)}
+                className="absolute top-2 right-2 bg-white/90 text-red-500 text-[10px] px-2 py-1 rounded-full shadow"
+              >
+                사진 삭제
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-4 mt-3">
+          <button onClick={toggleLike} className="text-xs flex items-center gap-1 tap-scale" style={{ color: liked ? "#4CAF50" : "#A8A8A8" }}>
+            {liked ? "💚" : "🤍"} 좋아요 {likeCount}
+          </button>
+          <button onClick={() => setOpen((v) => !v)} className="text-xs text-stone-400">
+            💬 댓글 {(n.comments || []).length}
+          </button>
+          <span className="text-[10px] text-stone-300 ml-auto">{n.date}</span>
+        </div>
+      </div>
+
+      {open && (
+        <div className="bg-stone-50 px-4 py-3 border-t border-stone-100">
+          {(n.comments || []).length === 0 ? (
+            <p className="text-xs text-stone-400 mb-2">아직 댓글이 없어요.</p>
+          ) : (
+            <ul className="space-y-1.5 mb-2">
+              {n.comments.map((c) => (
+                <li key={c.id} className="text-xs">
+                  <span className="font-semibold text-stone-700">{c.name}</span>{" "}
+                  <span className="text-stone-500">{c.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <input
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addComment()}
+              placeholder="댓글을 남겨보세요"
+              className="flex-1 rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs"
+            />
+            <button onClick={addComment} className="text-white text-xs px-3 rounded-lg" style={{ backgroundColor: "#4CAF50" }}>등록</button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function App() {
+  const { adminOn, tryUnlock, lock } = useAdmin();
+  const { myName } = useIdentity();
+  const [notices, setNotices] = React.useState([]);
+  const [ready, setReady] = React.useState(false);
+  const [showForm, setShowForm] = React.useState(false);
+  const [title, setTitle] = React.useState("");
+  const [body, setBody] = React.useState("");
+  const [pinned, setPinned] = React.useState(false);
+  const [file, setFile] = React.useState(null);
+  const [uploading, setUploading] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsub = REFS.notices.onSnapshot((snap) => {
+      const data = snap.data();
+      setNotices(data && data.items ? data.items : []);
+      setReady(true);
+    }, () => setReady(true));
+    return () => unsub();
+  }, []);
+
+  async function addNotice() {
+    if (!title.trim()) return;
+    setUploading(true);
+    let photoUrl = "";
+    try {
+      if (file) {
+        const path = `notices/${uid()}_${file.name}`;
+        const ref = storage.ref(path);
+        await ref.put(file);
+        photoUrl = await ref.getDownloadURL();
+      }
+    } catch (e) {
+      window.alert("사진 업로드에 실패했어요. 텍스트만 등록할게요.");
+    }
+    const item = { id: uid(), title: title.trim(), body: body.trim(), date: todayStr(), pinned, photoUrl, likes: [], comments: [] };
+    const next = pinned ? [item, ...notices] : [...notices, item];
+    // pinned notices float to top overall
+    const sorted = [...next].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+    REFS.notices.set({ items: sorted }).catch(() => {});
+    setTitle(""); setBody(""); setPinned(false); setFile(null); setUploading(false); setShowForm(false);
+  }
+
+  function removeNotice(id) {
+    if (!window.confirm("이 공지를 삭제할까요?")) return;
+    REFS.notices.set({ items: notices.filter((n) => n.id !== id) }).catch(() => {});
+  }
+
+  function deletePhoto(id, url) {
+    if (!window.confirm("사진만 삭제할까요?")) return;
+    try {
+      const path = decodeURIComponent(url.split("/o/")[1].split("?")[0]);
+      storage.ref(path).delete().catch(() => {});
+    } catch (e) {}
+    REFS.notices.set({ items: notices.map((n) => n.id === id ? { ...n, photoUrl: "" } : n) }).catch(() => {});
+  }
+
+  const sorted = [...notices].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+  return (
+    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+      <TopHeader title="📢 공지사항" subtitle="버디클럽 소식을 확인하세요" />
+
+      <section className="px-5 max-w-2xl mx-auto mb-4 flex justify-end gap-2">
+        <button
+          onClick={adminOn ? lock : () => tryUnlock()}
+          className={`text-[11px] px-3 py-1.5 rounded-full border ${adminOn ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
+          style={adminOn ? { backgroundColor: "#4CAF50" } : {}}
+        >
+          {adminOn ? "🔓 관리자" : "🔒 관리자"}
+        </button>
+        {adminOn && (
+          <button onClick={() => setShowForm((v) => !v)} className="text-[11px] px-3 py-1.5 rounded-full border" style={{ borderColor: "#FFD54F", color: "#B98900" }}>
+            {showForm ? "닫기" : "✏️ 공지 작성"}
+          </button>
+        )}
+      </section>
+
+      {showForm && adminOn && (
+        <section className="px-5 max-w-2xl mx-auto mb-4">
+          <div className="bg-white rounded-2xl p-4 border border-stone-200 space-y-2 shadow-sm">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="공지 제목" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="내용 (선택)" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm h-20" />
+            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0] || null)} className="text-xs" />
+            <label className="flex items-center gap-2 text-xs text-stone-500">
+              <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
+              📌 중요 공지로 상단 고정
+            </label>
+            <button onClick={addNotice} disabled={uploading} className="w-full text-white rounded-lg py-2 text-sm font-semibold" style={{ backgroundColor: "#4CAF50" }}>
+              {uploading ? "업로드 중..." : "공지 올리기"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="px-5 max-w-2xl mx-auto mb-8">
+        {!ready ? (
+          <div className="space-y-2"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>
+        ) : sorted.length === 0 ? (
+          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">아직 등록된 공지가 없어요.</p>
+        ) : (
+          <ul className="space-y-3">
+            {sorted.map((n) => (
+              <NoticeCard key={n.id} n={n} adminOn={adminOn} myName={myName} onRemove={removeNotice} onDeletePhoto={deletePhoto} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <BottomNav active="notices" />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

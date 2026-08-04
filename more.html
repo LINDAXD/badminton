@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>더보기 | Birdie Club</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="./firebase.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
+<script type="text/babel">
+
+function todayMD() {
+  const d = new Date();
+  return String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function App() {
+  const { adminOn, tryUnlock, lock } = useAdmin();
+  const { roster } = useRoster();
+  const [rsvp, setRsvp] = React.useState({});
+  const [checkinlog, setCheckinlog] = React.useState([]);
+  const [suggestions, setSuggestions] = React.useState([]);
+  const [sReady, setSReady] = React.useState(false);
+  const [schedule, setSchedule] = React.useState([]);
+  const [suggestText, setSuggestText] = React.useState("");
+  const [suggestMsg, setSuggestMsg] = React.useState("");
+  const [replyDrafts, setReplyDrafts] = React.useState({});
+  const [schedTitle, setSchedTitle] = React.useState("");
+  const [schedDate, setSchedDate] = React.useState("");
+  const [schedLoc, setSchedLoc] = React.useState("");
+
+  React.useEffect(() => {
+    const u1 = REFS.checkin.onSnapshot((s) => { const d = s.data(); setRsvp(d && d.data ? d.data : {}); });
+    const u2 = REFS.checkinlog.onSnapshot((s) => { const d = s.data(); setCheckinlog(d && d.items ? d.items : []); });
+    const u3 = REFS.suggestions.onSnapshot((s) => { const d = s.data(); setSuggestions(d && d.items ? d.items : []); setSReady(true); }, () => setSReady(true));
+    const u4 = REFS.schedule.onSnapshot((s) => { const d = s.data(); setSchedule(d && d.items ? d.items : []); });
+    return () => { u1(); u2(); u3(); u4(); };
+  }, []);
+
+  // 출석왕: checkinlog 기준 누적 출석 최다 회원
+  const attendanceCounts = {};
+  checkinlog.forEach((it) => { attendanceCounts[it.memberId] = (attendanceCounts[it.memberId] || 0) + 1; });
+  const kingId = Object.keys(attendanceCounts).sort((a, b) => attendanceCounts[b] - attendanceCounts[a])[0];
+  const king = roster.find((m) => m.id === kingId);
+
+  // 오늘의 버디: 오늘 참석(in) 체크한 사람 중 날짜 시드로 1명 랜덤 선정 (모두에게 동일)
+  const todayAttendees = roster.filter((m) => rsvp[m.id] === "in");
+  const seed = new Date().getDate();
+  const buddy = todayAttendees.length ? todayAttendees[seed % todayAttendees.length] : null;
+
+  // 생일회원
+  const birthdayMembers = roster.filter((m) => m.birthday && m.birthday === todayMD());
+
+  function submitSuggestion() {
+    const text = suggestText.trim();
+    if (!text) return;
+    const item = { id: uid(), text, date: todayStr(), reply: "", answered: false };
+    REFS.suggestions.set({ items: [item, ...suggestions] }).catch(() => {});
+    setSuggestText("");
+    setSuggestMsg("건의사항이 익명으로 전달됐어요. 감사해요! 🙏");
+    setTimeout(() => setSuggestMsg(""), 3000);
+  }
+
+  function submitReply(id) {
+    const reply = (replyDrafts[id] || "").trim();
+    if (!reply) return;
+    REFS.suggestions.set({
+      items: suggestions.map((s) => s.id === id ? { ...s, reply, answered: true } : s),
+    }).catch(() => {});
+  }
+
+  function addSchedule() {
+    if (!schedTitle.trim() || !schedDate) { window.alert("일정 제목과 날짜를 입력해주세요."); return; }
+    const item = { id: uid(), title: schedTitle.trim(), date: schedDate, location: schedLoc.trim() };
+    REFS.schedule.set({ items: [...schedule, item] }).catch(() => {});
+    setSchedTitle(""); setSchedDate(""); setSchedLoc("");
+  }
+
+  function removeSchedule(id) {
+    REFS.schedule.set({ items: schedule.filter((s) => s.id !== id) }).catch(() => {});
+  }
+
+  return (
+    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+      <TopHeader title="☰ 더보기" subtitle="버디클럽의 다양한 기능들이에요" />
+
+      {/* highlight cards */}
+      <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
+        <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+          <p className="text-[11px] text-stone-400 mb-1">🥇 출석왕</p>
+          <p className="text-sm font-bold text-stone-800">{king ? king.name : "집계 전"}</p>
+          {king && <p className="text-[11px] text-stone-400">누적 {attendanceCounts[kingId]}회 참석</p>}
+        </div>
+        <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+          <p className="text-[11px] text-stone-400 mb-1">🎯 오늘의 버디</p>
+          <p className="text-sm font-bold text-stone-800">{buddy ? buddy.name : "오늘 참석자 없음"}</p>
+        </div>
+      </section>
+
+      {birthdayMembers.length > 0 && (
+        <section className="px-5 max-w-2xl mx-auto mb-4">
+          <div className="rise-in rounded-2xl p-4" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
+            <p className="text-[11px] font-bold mb-1" style={{ color: "#B98900" }}>🎂 오늘의 생일 회원</p>
+            <p className="text-sm text-stone-700">{birthdayMembers.map((m) => m.name).join(", ")}님, 생일 축하해요!</p>
+          </div>
+        </section>
+      )}
+
+      {/* schedule */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <p className="text-sm font-bold text-stone-700 mb-2">🗓️ 일정</p>
+        {schedule.length === 0 ? (
+          <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">등록된 일정이 없어요.</p>
+        ) : (
+          <ul className="space-y-2 mb-2">
+            {[...schedule].sort((a, b) => a.date.localeCompare(b.date)).map((s) => (
+              <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-stone-800">{s.title}</p>
+                  <p className="text-[11px] text-stone-400">{fmtDate(s.date)}{s.location ? ` · ${s.location}` : ""}</p>
+                </div>
+                {adminOn && <button onClick={() => removeSchedule(s.id)} className="text-red-400 text-xs">삭제</button>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {adminOn && (
+          <div className="bg-white rounded-2xl p-4 border border-stone-200 space-y-2">
+            <input value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="일정 제목" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            <div className="flex gap-2">
+              <input type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <input value={schedLoc} onChange={(e) => setSchedLoc(e.target.value)} placeholder="장소(선택)" className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            </div>
+            <button onClick={addSchedule} className="w-full text-white rounded-lg py-2 text-sm font-semibold" style={{ backgroundColor: "#4CAF50" }}>일정 추가</button>
+          </div>
+        )}
+      </section>
+
+      {/* suggestions */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <p className="text-sm font-bold text-stone-700 mb-2">📮 건의사항 (익명)</p>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 mb-3">
+          <textarea
+            value={suggestText}
+            onChange={(e) => setSuggestText(e.target.value)}
+            placeholder="운영진에게 익명으로 건의하고 싶은 내용을 적어주세요."
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm h-20"
+          />
+          <button onClick={submitSuggestion} className="mt-2 w-full text-white rounded-lg py-2 text-sm font-semibold" style={{ backgroundColor: "#4CAF50" }}>
+            익명으로 보내기
+          </button>
+          {suggestMsg && <p className="text-xs mt-1.5" style={{ color: "#4CAF50" }}>{suggestMsg}</p>}
+        </div>
+
+        {!sReady ? (
+          <Skeleton className="h-16 w-full" />
+        ) : suggestions.length === 0 ? (
+          <p className="text-xs text-stone-400 text-center py-2">아직 등록된 건의사항이 없어요.</p>
+        ) : (
+          <ul className="space-y-2">
+            {suggestions.map((s) => (
+              <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm text-stone-700 whitespace-pre-wrap">{s.text}</p>
+                  <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${s.answered ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-400"}`}>
+                    {s.answered ? "답변완료" : "대기중"}
+                  </span>
+                </div>
+                <p className="text-[10px] text-stone-300 mt-1">{s.date}</p>
+                {s.reply && (
+                  <div className="mt-2 bg-stone-50 rounded-lg px-3 py-2">
+                    <p className="text-[11px] font-bold text-stone-500 mb-0.5">운영진 답변</p>
+                    <p className="text-xs text-stone-600 whitespace-pre-wrap">{s.reply}</p>
+                  </div>
+                )}
+                {adminOn && !s.answered && (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={replyDrafts[s.id] || ""}
+                      onChange={(e) => setReplyDrafts({ ...replyDrafts, [s.id]: e.target.value })}
+                      placeholder="답변 작성"
+                      className="flex-1 rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs"
+                    />
+                    <button onClick={() => submitReply(s.id)} className="text-white text-xs px-3 rounded-lg" style={{ backgroundColor: "#4CAF50" }}>등록</button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* admin panel */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-bold text-stone-700">🛠️ 관리자</p>
+          <button
+            onClick={adminOn ? lock : () => tryUnlock()}
+            className={`text-[11px] px-3 py-1.5 rounded-full border ${adminOn ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
+            style={adminOn ? { backgroundColor: "#4CAF50" } : {}}
+          >
+            {adminOn ? "🔓 관리자" : "🔒 관리자"}
+          </button>
+        </div>
+        {adminOn ? (
+          <div className="grid grid-cols-2 gap-3">
+            <a href="./members.html" className="tap-scale bg-white rounded-xl p-3 text-center border border-stone-200 text-xs font-semibold text-stone-600">👥 회원 삭제/수정</a>
+            <a href="./notices.html" className="tap-scale bg-white rounded-xl p-3 text-center border border-stone-200 text-xs font-semibold text-stone-600">📢 공지 작성 / 사진 삭제</a>
+          </div>
+        ) : (
+          <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">관리자 인증 후 이용 가능해요.</p>
+        )}
+      </section>
+
+      {/* future features */}
+      <section className="px-5 max-w-2xl mx-auto mb-8">
+        <p className="text-sm font-bold text-stone-700 mb-2">🔮 추후 업데이트 예정</p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { emoji: "📷", label: "QR 출석" },
+            { emoji: "💰", label: "회비관리" },
+            { emoji: "📊", label: "경기기록" },
+          ].map((f) => (
+            <div key={f.label} className="bg-stone-50 rounded-2xl p-4 text-center border border-stone-100 opacity-60">
+              <div className="text-2xl mb-1">{f.emoji}</div>
+              <p className="text-[11px] font-semibold text-stone-500">{f.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <BottomNav active="more" />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
