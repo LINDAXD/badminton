@@ -582,35 +582,29 @@ function App() {
 
       {tab === "checkin" && (
         <section className="px-5 mt-5 space-y-4">
-          {rosterReady && roster.length > 0 && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-              {!myId ? (
-                <>
-                  <p className="text-sm font-semibold mb-2">먼저 본인 이름을 선택해주세요</p>
-                  <div className="flex flex-wrap gap-2">
-                    {roster.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => chooseIdentity(m.id)}
-                        className="px-3 py-1.5 rounded-full text-sm border border-stone-200 bg-stone-50 text-stone-600"
-                      >
-                        저는 {m.name}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <p className="text-sm">
-                    현재 <span className="font-bold text-green-700">{(roster.find((m) => m.id === myId) || {}).name || "?"}</span> 님으로 로그인됨
-                  </p>
-                  <button onClick={resetIdentity} className="text-xs text-stone-400 underline underline-offset-2">
-                    본인 아님
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+            {!myId ? (
+              <>
+                <p className="text-sm font-semibold mb-1">로그인이 필요해요</p>
+                <p className="text-xs text-stone-400 mb-3">홈페이지에서 이름으로 먼저 입장해주세요. (처음이면 자동 등록돼요)</p>
+                <a
+                  href="./index.html#login"
+                  className="inline-block bg-green-700 text-white text-xs font-semibold rounded-full px-4 py-2"
+                >
+                  홈페이지에서 로그인하기
+                </a>
+              </>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="text-sm">
+                  현재 <span className="font-bold text-green-700">{(roster.find((m) => m.id === myId) || {}).name || "?"}</span> 님으로 로그인됨
+                </p>
+                <button onClick={resetIdentity} className="text-xs text-stone-400 underline underline-offset-2">
+                  로그아웃
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
             <p className="text-sm font-semibold mb-1">오늘 참석 체크인</p>
