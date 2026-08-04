@@ -56,8 +56,13 @@ function App() {
     persist(roster.map((m) => (m.id === id ? { ...m, grade } : m)));
   }
 
-  function updateBirthday(id, birthday) {
-    persist(roster.map((m) => (m.id === id ? { ...m, birthday } : m)));
+  function updatePin(id, pin) {
+    persist(roster.map((m) => (m.id === id ? { ...m, pin } : m)));
+  }
+
+  const [revealedPins, setRevealedPins] = React.useState({});
+  function togglePinReveal(id) {
+    setRevealedPins((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   function removeMember(id, name) {
@@ -131,13 +136,26 @@ function App() {
                             <option key={gr.key} value={gr.key}>{gr.emoji} {gr.key}</option>
                           ))}
                         </select>
-                        <input
-                          type="text"
-                          value={m.birthday || ""}
-                          onChange={(e) => updateBirthday(m.id, e.target.value)}
-                          placeholder="생일 MM-DD"
-                          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 w-28"
-                        />
+                        <span className="text-[11px] text-stone-400 px-2 py-1.5">
+                          🎂 {m.birthday ? m.birthday : "생일 미입력 (본인이 홈에서 설정)"}
+                        </span>
+                        <div className="flex items-center gap-1.5 w-full">
+                          <span className="text-[11px] text-stone-400 shrink-0">🔑 비밀번호</span>
+                          <input
+                            type={revealedPins[m.id] ? "text" : "password"}
+                            value={m.pin || ""}
+                            onChange={(e) => updatePin(m.id, e.target.value.replace(/\D/g, "").slice(0, 4))}
+                            placeholder="미설정"
+                            className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 w-20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => togglePinReveal(m.id)}
+                            className="text-[11px] text-stone-400 underline underline-offset-2"
+                          >
+                            {revealedPins[m.id] ? "숨기기" : "보기"}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </li>

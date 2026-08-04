@@ -10,6 +10,11 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function todayMD() {
+  const d = new Date();
+  return String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
 function fmtDate(d) {
   if (!d) return "";
   const [y, m, day] = d.split("-");
