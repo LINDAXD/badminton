@@ -12,7 +12,12 @@ function todayStr() {
 
 function todayMD() {
   const d = new Date();
-  return String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+}
+
+function fmtBirthday(b) {
+  if (!b || b.length !== 4) return b || "";
+  return `${b.slice(0, 2)}월 ${b.slice(2, 4)}일`;
 }
 
 function fmtDate(d) {
@@ -21,19 +26,34 @@ function fmtDate(d) {
   return `${y}.${m}.${day}`;
 }
 
+function fmtTime(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":").map(Number);
+  const period = h < 12 ? "오전" : "오후";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${period} ${h12}:${String(m).padStart(2, "0")}`;
+}
+
 function gradeInfo(grade) {
   return (window.GRADES && window.GRADES.find((g) => g.key === grade)) || window.GRADES[2];
 }
 
+function isOfficerOf(roster, myId) {
+  const me = roster.find((m) => m.id === myId);
+  return !!(me && me.grade === "운영진");
+}
+
 // ---------- 관리자 잠금 훅 ----------
-function useAdmin() {
-  const [adminOn, setAdminOn] = useState(() => localStorage.getItem("bm_admin") === "1");
+// isOfficer: 로그인한 회원의 등급이 "운영진"이면 비밀번호 없이도 자동으로 관리자 권한을 가짐
+function useAdmin(isOfficer) {
+  const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
+  const adminOn = pinOn || !!isOfficer;
   function tryUnlock(cb) {
     if (adminOn) { if (cb) cb(); return; }
     const pin = window.prompt("관리자 비밀번호를 입력하세요");
     if (pin === window.ADMIN_PIN) {
       localStorage.setItem("bm_admin", "1");
-      setAdminOn(true);
+      setPinOn(true);
       if (cb) cb();
     } else if (pin !== null) {
       window.alert("비밀번호가 틀렸어요.");
@@ -41,9 +61,9 @@ function useAdmin() {
   }
   function lock() {
     localStorage.removeItem("bm_admin");
-    setAdminOn(false);
+    setPinOn(false);
   }
-  return { adminOn, tryUnlock, lock };
+  return { adminOn, tryUnlock, lock, isOfficer: !!isOfficer };
 }
 
 // ---------- 로그인(내 신원) 훅 ----------
@@ -102,8 +122,9 @@ function BottomNav({ active }) {
   const items = [
     { key: "home", href: "./index.html", icon: "🏠", label: "홈" },
     { key: "members", href: "./members.html", icon: "👥", label: "회원" },
-    { key: "match", href: "./match.html", icon: "🎲", label: "랜덤매칭" },
+    { key: "match", href: "./match.html", icon: "🎲", label: "매칭" },
     { key: "notices", href: "./notices.html", icon: "📢", label: "공지" },
+    { key: "reviews", href: "./reviews.html", icon: "📸", label: "후기" },
     { key: "more", href: "./more.html", icon: "☰", label: "더보기" },
   ];
   return (

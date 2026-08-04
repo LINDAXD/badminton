@@ -123,8 +123,9 @@ function App() {
   const [rsvp, setRsvp] = useState({});
   const [restWish, setRestWish] = useState({});
   const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
-  const [adminOn, setAdminOn] = useState(() => localStorage.getItem("bm_admin") === "1");
+  const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
   const ADMIN_PIN = window.ADMIN_PIN;
+  const adminOn = pinOn || isOfficerOf(roster, myId);
 
   const canGenerate = players.length >= 4 && numCourts >= 1;
   const maxCourts = Math.max(1, Math.floor(players.length / 4));
@@ -138,17 +139,18 @@ function App() {
     setMyId(null);
   }
   function tryAdminUnlock() {
+    if (adminOn) return;
     const pin = window.prompt("관리자 비밀번호를 입력하세요");
     if (pin === ADMIN_PIN) {
       localStorage.setItem("bm_admin", "1");
-      setAdminOn(true);
+      setPinOn(true);
     } else if (pin !== null) {
       window.alert("비밀번호가 틀렸어요.");
     }
   }
   function adminLock() {
     localStorage.removeItem("bm_admin");
-    setAdminOn(false);
+    setPinOn(false);
   }
 
   // ---- real-time sync from Firestore ----
@@ -364,36 +366,54 @@ function App() {
   const allDone = round && round.matches.every((m) => m.done);
 
   return (
-    <div className="min-h-screen bg-stone-100 text-stone-900 pb-24 font-sans">
-      <header className="sticky top-0 z-10 text-white px-5 pt-6 pb-4 shadow-md" style={{ backgroundColor: "#4CAF50" }}>
-        <div className="flex items-center justify-between">
-          <a href="./index.html" className="flex items-center gap-2 text-white/90">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#FFD54F" }} />
-            <p className="text-[11px] tracking-[0.25em] uppercase">Birdie Club</p>
-          </a>
-          <button
-            onClick={adminOn ? adminLock : tryAdminUnlock}
-            className={`text-[10px] px-2.5 py-1 rounded-full border ${
-              adminOn ? "text-green-900 border-transparent" : "bg-white/10 text-white border-white/30"
-            }`}
-            style={adminOn ? { backgroundColor: "#FFD54F" } : {}}
-          >
-            {adminOn ? "🔓 관리자" : "🔒 관리자 잠김"}
-          </button>
-        </div>
-        <h1 className="headfont text-2xl uppercase mt-1">🎲 랜덤매칭</h1>
-        <div className="flex gap-4 mt-3 text-sm text-white/90">
-          <span>참석 {players.length}명</span>
+    <div className="min-h-screen bg-white text-stone-900 pb-24 font-sans">
+      <TopHeader title="🎲 랜덤매칭" subtitle="오늘 코트 매칭을 만들어봐요" />
+
+      <section className="px-5 max-w-2xl mx-auto mb-4 flex items-center justify-between">
+        <div className="flex gap-3 text-xs text-stone-500">
+          <span>참석 <b className="text-stone-800">{players.length}</b>명</span>
           <span>·</span>
-          <span>코트 {numCourts}면</span>
+          <span>코트 <b className="text-stone-800">{numCourts}</b>면</span>
           {roundNum > 0 && (
             <>
               <span>·</span>
-              <span>{roundNum}라운드 진행</span>
+              <span><b className="text-stone-800">{roundNum}</b>라운드 진행</span>
             </>
           )}
         </div>
-      </header>
+        <button
+          onClick={adminOn ? adminLock : tryAdminUnlock}
+          className={`text-[11px] px-3 py-1.5 rounded-full border shrink-0 ${
+            adminOn ? "text-white border-transparent" : "text-stone-400 border-stone-200"
+          }`}
+          style={adminOn ? { backgroundColor: "#4CAF50" } : {}}
+        >
+          {adminOn ? "🔓 관리자" : "🔒 관리자"}
+        </button>
+      </section>
+
+      {/* top segmented sub-tabs (page-internal navigation) */}
+      <section className="px-5 max-w-2xl mx-auto mb-5">
+        <div className="flex gap-1.5 bg-stone-50 rounded-2xl p-1.5 border border-stone-100">
+          {[
+            { key: "players", label: "참석자", emoji: "👥" },
+            { key: "checkin", label: "체크인", emoji: "✅" },
+            { key: "match", label: "매칭", emoji: "🔀" },
+            { key: "record", label: "기록", emoji: "🏆" },
+          ].map(({ key, label, emoji }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold tap-scale flex items-center justify-center gap-1 transition ${
+                tab === key ? "text-white shadow-sm" : "text-stone-400"
+              }`}
+              style={tab === key ? { backgroundColor: "#4CAF50" } : {}}
+            >
+              <span>{emoji}</span>{label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {tab === "players" && (
         <section className="px-5 mt-5 space-y-5">
@@ -434,7 +454,7 @@ function App() {
                         onClick={() => toggleAttend(m)}
                         className={`px-3 py-1.5 rounded-full text-sm border transition ${
                           attending
-                            ? "bg-green-700 text-white border-green-700"
+                            ? "bg-[#4CAF50] text-white border-[#4CAF50]"
                             : "bg-stone-50 text-stone-500 border-stone-200"
                         }`}
                       >
@@ -455,21 +475,21 @@ function App() {
                 }}
                 onKeyDown={(e) => e.key === "Enter" && addRosterMember()}
                 placeholder="새 멤버 이름"
-                className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700"
+                className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4CAF50]"
               />
               <button
                 onClick={addRosterMember}
-                className="bg-green-700 text-white rounded-xl px-4 flex items-center gap-1 active:scale-95 transition"
+                className="bg-[#4CAF50] text-white rounded-xl px-4 flex items-center gap-1 active:scale-95 transition"
               >
                 + 등록
               </button>
             </div>
             {addError && <p className="text-xs text-red-500 mt-1.5">{addError}</p>}
-            <p className="text-[11px] text-green-700 mt-2">🔄 이 명단은 이제 모두에게 실시간으로 공유돼요.</p>
+            <p className="text-[11px] text-[#4CAF50] mt-2">🔄 이 명단은 이제 모두에게 실시간으로 공유돼요.</p>
 
             <button
               onClick={() => setShowBackup((v) => !v)}
-              className="text-xs text-green-700 underline underline-offset-2 mt-3"
+              className="text-xs text-[#4CAF50] underline underline-offset-2 mt-3"
             >
               {showBackup ? "백업/복원 닫기" : "명단 백업/복원하기"}
             </button>
@@ -488,11 +508,11 @@ function App() {
                   />
                   <button
                     onClick={copyBackup}
-                    className="mt-2 w-full bg-green-700 text-white rounded-lg py-2 text-xs font-semibold"
+                    className="mt-2 w-full bg-[#4CAF50] text-white rounded-lg py-2 text-xs font-semibold"
                   >
                     코드 복사하기
                   </button>
-                  {copyMsg && <p className="text-xs text-green-700 mt-1">{copyMsg}</p>}
+                  {copyMsg && <p className="text-xs text-[#4CAF50] mt-1">{copyMsg}</p>}
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-stone-500 mb-1">코드로 복원하기</p>
@@ -500,7 +520,7 @@ function App() {
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
                     placeholder="붙여넣기: 리리,밍크크,철수"
-                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-xs h-16 focus:outline-none focus:ring-2 focus:ring-green-700"
+                    className="w-full rounded-lg border border-stone-300 px-3 py-2 text-xs h-16 focus:outline-none focus:ring-2 focus:ring-[#4CAF50]"
                   />
                   <button
                     onClick={importRoster}
@@ -508,7 +528,7 @@ function App() {
                   >
                     복원하기
                   </button>
-                  {importMsg && <p className="text-xs text-green-700 mt-1">{importMsg}</p>}
+                  {importMsg && <p className="text-xs text-[#4CAF50] mt-1">{importMsg}</p>}
                 </div>
               </div>
             )}
@@ -536,7 +556,7 @@ function App() {
 
           <div>
             <p className="text-sm font-semibold mb-2">오늘 참석자 ({players.length}명)</p>
-            <p className="text-[11px] text-green-700 mb-2">🔄 체크인에서 "참석" 누르면 자동으로 여기 반영돼요.</p>
+            <p className="text-[11px] text-[#4CAF50] mb-2">🔄 체크인에서 "참석" 누르면 자동으로 여기 반영돼요.</p>
             {players.length === 0 ? (
               <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
                 위 고정 멤버를 탭해서 오늘 참석자를 체크해주세요.
@@ -565,7 +585,7 @@ function App() {
             disabled={!canGenerate}
             onClick={handleGenerate}
             className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
-              canGenerate ? "bg-green-700 text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
+              canGenerate ? "bg-[#4CAF50] text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
             } transition`}
           >
             🔀 {roundNum > 0 ? "다음 라운드 매칭 생성" : "매칭 생성하기"} {!adminOn && "🔒"}
@@ -585,7 +605,7 @@ function App() {
                 <p className="text-xs text-stone-400 mb-3">홈페이지에서 이름으로 먼저 입장해주세요. (처음이면 자동 등록돼요)</p>
                 <a
                   href="./index.html#login"
-                  className="inline-block bg-green-700 text-white text-xs font-semibold rounded-full px-4 py-2"
+                  className="inline-block bg-[#4CAF50] text-white text-xs font-semibold rounded-full px-4 py-2"
                 >
                   홈페이지에서 로그인하기
                 </a>
@@ -593,7 +613,7 @@ function App() {
             ) : (
               <div className="flex items-center justify-between">
                 <p className="text-sm">
-                  현재 <span className="font-bold text-green-700">{(roster.find((m) => m.id === myId) || {}).name || "?"}</span> 님으로 로그인됨
+                  현재 <span className="font-bold text-[#4CAF50]">{(roster.find((m) => m.id === myId) || {}).name || "?"}</span> 님으로 로그인됨
                 </p>
                 <button onClick={resetIdentity} className="text-xs text-stone-400 underline underline-offset-2">
                   로그아웃
@@ -629,7 +649,7 @@ function App() {
                           disabled={!isMe}
                           onClick={() => setMyRsvp(m.id, "in")}
                           className={`px-3 py-1 rounded-full text-xs border transition ${
-                            status === "in" ? "bg-green-700 text-white border-green-700" : "bg-stone-50 text-stone-500 border-stone-200"
+                            status === "in" ? "bg-[#4CAF50] text-white border-[#4CAF50]" : "bg-stone-50 text-stone-500 border-stone-200"
                           } ${!isMe ? "opacity-40 cursor-not-allowed" : ""}`}
                         >
                           참석
@@ -669,7 +689,7 @@ function App() {
                 disabled={!canGenerate}
                 onClick={handleGenerate}
                 className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
-                  canGenerate ? "bg-green-700 text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
+                  canGenerate ? "bg-[#4CAF50] text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
                 } transition ${justShuffled ? "shuffle-pulse" : ""}`}
               >
                 🔀 매칭 생성하기 {!adminOn && "🔒"}
@@ -680,9 +700,9 @@ function App() {
             <>
               {round.matches.map((m) => (
                 <div key={m.id} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-                  <div className="bg-green-700 text-green-100 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
+                  <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
                     <span>Court {m.court}</span>
-                    {m.done && <span className="text-yellow-400">종료</span>}
+                    {m.done && <span className="text-[#FFD54F]">종료</span>}
                   </div>
                   <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-4 gap-2">
                     <div className="text-right">
@@ -722,7 +742,7 @@ function App() {
                     <button
                       onClick={() => finishMatch(m.id)}
                       disabled={m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB}
-                      className="w-full py-2.5 text-sm font-semibold bg-yellow-400 text-green-900 disabled:bg-stone-200 disabled:text-stone-400"
+                      className="w-full py-2.5 text-sm font-semibold bg-[#FFD54F] text-[#5c4a00] disabled:bg-stone-200 disabled:text-stone-400"
                     >
                       경기 종료
                     </button>
@@ -763,7 +783,7 @@ function App() {
               {allDone && (
                 <button
                   onClick={handleGenerate}
-                  className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide bg-green-700 text-white active:scale-[0.98] transition"
+                  className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide bg-[#4CAF50] text-white active:scale-[0.98] transition"
                 >
                   🔀 다음 라운드 {!adminOn && "🔒"}
                 </button>
@@ -821,25 +841,7 @@ function App() {
         </section>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 flex">
-        {[
-          { key: "players", label: "참석자", emoji: "👥" },
-          { key: "checkin", label: "체크인", emoji: "✅" },
-          { key: "match", label: "매칭", emoji: "🔀" },
-          { key: "record", label: "기록", emoji: "🏆" },
-        ].map(({ key, label, emoji }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex-1 py-3 flex flex-col items-center gap-1 text-xs ${
-              tab === key ? "text-green-700 font-semibold" : "text-stone-400"
-            }`}
-          >
-            <span className="text-lg">{emoji}</span>
-            {label}
-          </button>
-        ))}
-      </nav>
+      <BottomNav active="match" />
     </div>
   );
 }

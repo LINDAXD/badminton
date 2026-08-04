@@ -131,8 +131,9 @@ function NoticeCard({ n, adminOn, myName, onRemove, onDeletePhoto }) {
 }
 
 function App() {
-  const { adminOn, tryUnlock, lock } = useAdmin();
-  const { myName } = useIdentity();
+  const { myId, myName } = useIdentity();
+  const { roster } = useRoster();
+  const { adminOn, tryUnlock, lock } = useAdmin(isOfficerOf(roster, myId));
   const [notices, setNotices] = React.useState([]);
   const [ready, setReady] = React.useState(false);
   const [showForm, setShowForm] = React.useState(false);

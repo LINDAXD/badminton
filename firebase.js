@@ -23,6 +23,7 @@ window.REFS = {
   suggestions: db.collection("badminton").doc("suggestions"), // 건의사항
   schedule: db.collection("badminton").doc("schedule"),     // 일정
   checkinlog: db.collection("badminton").doc("checkinlog"), // 출석 이력(출석왕 계산용)
+  reviews: db.collection("badminton").doc("reviews"),       // 모임 후기
 };
 
 // ---- 공통 상수 ----

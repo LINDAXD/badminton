@@ -22,8 +22,9 @@
 <script type="text/babel">
 
 function App() {
-  const { adminOn, tryUnlock, lock } = useAdmin();
+  const { myId } = useIdentity();
   const { roster } = useRoster();
+  const { adminOn, tryUnlock, lock } = useAdmin(isOfficerOf(roster, myId));
   const [rsvp, setRsvp] = React.useState({});
   const [checkinlog, setCheckinlog] = React.useState([]);
   const [suggestions, setSuggestions] = React.useState([]);
@@ -34,6 +35,7 @@ function App() {
   const [replyDrafts, setReplyDrafts] = React.useState({});
   const [schedTitle, setSchedTitle] = React.useState("");
   const [schedDate, setSchedDate] = React.useState("");
+  const [schedTime, setSchedTime] = React.useState("");
   const [schedLoc, setSchedLoc] = React.useState("");
 
   React.useEffect(() => {
@@ -76,11 +78,16 @@ function App() {
     }).catch(() => {});
   }
 
+  function removeSuggestion(id) {
+    if (!window.confirm("이 건의사항을 삭제할까요?")) return;
+    REFS.suggestions.set({ items: suggestions.filter((s) => s.id !== id) }).catch(() => {});
+  }
+
   function addSchedule() {
     if (!schedTitle.trim() || !schedDate) { window.alert("일정 제목과 날짜를 입력해주세요."); return; }
-    const item = { id: uid(), title: schedTitle.trim(), date: schedDate, location: schedLoc.trim() };
+    const item = { id: uid(), title: schedTitle.trim(), date: schedDate, time: schedTime, location: schedLoc.trim() };
     REFS.schedule.set({ items: [...schedule, item] }).catch(() => {});
-    setSchedTitle(""); setSchedDate(""); setSchedLoc("");
+    setSchedTitle(""); setSchedDate(""); setSchedTime(""); setSchedLoc("");
   }
 
   function removeSchedule(id) {
@@ -120,11 +127,13 @@ function App() {
           <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">등록된 일정이 없어요.</p>
         ) : (
           <ul className="space-y-2 mb-2">
-            {[...schedule].sort((a, b) => a.date.localeCompare(b.date)).map((s) => (
+            {[...schedule].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).map((s) => (
               <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-stone-800">{s.title}</p>
-                  <p className="text-[11px] text-stone-400">{fmtDate(s.date)}{s.location ? ` · ${s.location}` : ""}</p>
+                  <p className="text-[11px] text-stone-400">
+                    {fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}{s.location ? ` · ${s.location}` : ""}
+                  </p>
                 </div>
                 {adminOn && <button onClick={() => removeSchedule(s.id)} className="text-red-400 text-xs">삭제</button>}
               </li>
@@ -136,8 +145,9 @@ function App() {
             <input value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="일정 제목" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             <div className="flex gap-2">
               <input type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
-              <input value={schedLoc} onChange={(e) => setSchedLoc(e.target.value)} placeholder="장소(선택)" className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <input type="time" value={schedTime} onChange={(e) => setSchedTime(e.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </div>
+            <input value={schedLoc} onChange={(e) => setSchedLoc(e.target.value)} placeholder="장소(선택)" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             <button onClick={addSchedule} className="w-full text-white rounded-lg py-2 text-sm font-semibold" style={{ backgroundColor: "#4CAF50" }}>일정 추가</button>
           </div>
         )}
@@ -173,7 +183,12 @@ function App() {
                     {s.answered ? "답변완료" : "대기중"}
                   </span>
                 </div>
-                <p className="text-[10px] text-stone-300 mt-1">{s.date}</p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-[10px] text-stone-300">{s.date}</p>
+                  {adminOn && (
+                    <button onClick={() => removeSuggestion(s.id)} className="text-red-400 text-[11px]">삭제</button>
+                  )}
+                </div>
                 {s.reply && (
                   <div className="mt-2 bg-stone-50 rounded-lg px-3 py-2">
                     <p className="text-[11px] font-bold text-stone-500 mb-0.5">운영진 답변</p>

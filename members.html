@@ -23,7 +23,8 @@
 
 function App() {
   const { roster, ready, persist } = useRoster();
-  const { adminOn, tryUnlock, lock } = useAdmin();
+  const { myId } = useIdentity();
+  const { adminOn, tryUnlock, lock } = useAdmin(isOfficerOf(roster, myId));
   const [search, setSearch] = React.useState("");
   const [bulkText, setBulkText] = React.useState("");
   const [addMsg, setAddMsg] = React.useState("");
@@ -137,7 +138,7 @@ function App() {
                           ))}
                         </select>
                         <span className="text-[11px] text-stone-400 px-2 py-1.5">
-                          🎂 {m.birthday ? m.birthday : "생일 미입력 (본인이 홈에서 설정)"}
+                          🎂 {m.birthday ? fmtBirthday(m.birthday) : "생일 미입력 (본인이 홈에서 설정)"}
                         </span>
                         <div className="flex items-center gap-1.5 w-full">
                           <span className="text-[11px] text-stone-400 shrink-0">🔑 비밀번호</span>
