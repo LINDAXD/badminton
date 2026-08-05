@@ -22,9 +22,57 @@
 
 function App() {
   const { roster, ready, persist } = useRoster();
+  const [checkinlog, setCheckinlog] = React.useState([]);
+  const [scheduleItems, setScheduleItems] = React.useState([]);
+  const [kindvotes, setKindvotes] = React.useState([]);
+  const [matchhistory, setMatchhistory] = React.useState([]);
+
+  React.useEffect(() => {
+    const unsub = REFS.kindvotes.onSnapshot((snap) => {
+      const data = snap.data();
+      setKindvotes(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = REFS.matchhistory.onSnapshot((snap) => {
+      const data = snap.data();
+      setMatchhistory(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+  const [profileMember, setProfileMember] = React.useState(null);
+
+  React.useEffect(() => {
+    const unsub = REFS.checkinlog.onSnapshot((snap) => {
+      const data = snap.data();
+      setCheckinlog(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = REFS.schedule.onSnapshot((snap) => {
+      const data = snap.data();
+      setScheduleItems(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  function saveProfileFields(fields) {
+    const next = roster.map((m) => (m.id === profileMember.id ? { ...m, ...fields } : m));
+    persist(next);
+    setProfileMember((prev) => (prev ? { ...prev, ...fields } : prev));
+  }
   const { myId } = useIdentity();
   const { adminOn, tryUnlock, lock } = useAdmin(isOfficerOf(roster, myId));
   const [search, setSearch] = React.useState("");
+  const [socialFilter, setSocialFilter] = React.useState([]);
+
+  function toggleSocialFilter(key) {
+    setSocialFilter((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }
   const [bulkText, setBulkText] = React.useState("");
   const [addMsg, setAddMsg] = React.useState("");
   const [pending, setPending] = React.useState([]);
@@ -38,7 +86,7 @@ function App() {
   }, []);
 
   function approveRequest(req) {
-    const member = { id: uid(), name: req.name, grade: "신입회원", joinedAt: todayStr(), birthday: "", pin: req.pin };
+    const member = { id: uid(), name: req.name, grade: "신입회원", joinedAt: todayStr(), birthday: "", pin: req.pin, level: req.level || "초보" };
     persist([...roster, member]);
     const next = pending.filter((p) => p.id !== req.id);
     setPending(next);
@@ -80,6 +128,10 @@ function App() {
     persist(roster.map((m) => (m.id === id ? { ...m, grade } : m)));
   }
 
+  function updateLevel(id, level) {
+    persist(roster.map((m) => (m.id === id ? { ...m, level } : m)));
+  }
+
   function updatePin(id, pin) {
     persist(roster.map((m) => (m.id === id ? { ...m, pin } : m)));
   }
@@ -94,7 +146,9 @@ function App() {
     persist(roster.filter((m) => m.id !== id));
   }
 
-  const filtered = roster.filter((m) => m.name.toLowerCase().includes(search.trim().toLowerCase()));
+  const filtered = roster
+    .filter((m) => m.name.toLowerCase().includes(search.trim().toLowerCase()))
+    .filter((m) => socialFilter.every((key) => m.social && m.social[key]));
   const grouped = window.GRADES.map((g) => ({
     ...g,
     members: filtered.filter((m) => (m.grade || "일반회원") === g.key),
@@ -121,6 +175,21 @@ function App() {
             {adminOn ? "🔓 관리자" : "🔒 관리자"}
           </button>
         </div>
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {window.SOCIAL_TAGS.map((t) => {
+            const active = socialFilter.includes(t.key);
+            return (
+              <button
+                key={t.key}
+                onClick={() => toggleSocialFilter(t.key)}
+                className={`text-[11px] px-2.5 py-1.5 rounded-full border tap-scale ${active ? "text-white border-transparent" : "bg-white text-stone-500 border-stone-200"}`}
+                style={active ? { backgroundColor: "#4CAF50" } : {}}
+              >
+                {t.emoji} {t.label}
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {adminOn && pending.length > 0 && (
@@ -133,7 +202,7 @@ function App() {
                 <li key={req.id} className="flex items-center justify-between border border-stone-200 rounded-xl px-3 py-2.5">
                   <div>
                     <p className="text-sm font-semibold text-stone-800">{req.name}</p>
-                    <p className="text-[11px] text-stone-400">{req.requestedAt} 신청</p>
+                    <p className="text-[11px] text-stone-400">{req.requestedAt} 신청{req.level ? ` · 희망 레벨 ${req.level}` : ""}</p>
                   </div>
                   <div className="flex gap-1.5">
                     <button onClick={() => approveRequest(req)} className="text-[11px] font-semibold text-white px-3 py-1.5 rounded-full" style={{ backgroundColor: "#4CAF50" }}>
@@ -169,11 +238,13 @@ function App() {
                 {g.members.map((m) => (
                   <li key={m.id} className="rise-in bg-white rounded-xl px-4 py-3 border border-stone-200 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-stone-800">{m.name}</p>
-                        <div className="mt-1"><GradeBadge grade={m.grade} /></div>
-                      </div>
-                      {adminOn && (
+                      <button onClick={() => setProfileMember(m)} className="text-left tap-scale">
+                        <p className="text-sm font-semibold text-stone-800 underline decoration-dotted underline-offset-4">{m.name}</p>
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          <GradeBadge grade={m.grade} />
+                          {m.level && <span className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded-full px-2 py-0.5">{m.level}</span>}
+                        </div>
+                      </button>{adminOn && (
                         <div className="flex items-center gap-3">
                           <a href={`./myinfo.html?id=${m.id}`} className="text-[11px] text-stone-400 underline underline-offset-2">활동보기</a>
                           <button onClick={() => removeMember(m.id, m.name)} className="text-red-400 text-xs">삭제</button>
@@ -189,6 +260,15 @@ function App() {
                         >
                           {window.GRADES.map((gr) => (
                             <option key={gr.key} value={gr.key}>{gr.emoji} {gr.key}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={m.level || "초보"}
+                          onChange={(e) => updateLevel(m.id, e.target.value)}
+                          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5"
+                        >
+                          {window.LEVELS.map((lv) => (
+                            <option key={lv} value={lv}>{lv}</option>
                           ))}
                         </select>
                         <span className="text-[11px] text-stone-400 px-2 py-1.5">
@@ -244,6 +324,21 @@ function App() {
       </section>
 
       <BottomNav active="members" />
+
+      {profileMember && (
+        <MemberProfileModal
+          member={profileMember}
+          checkinlog={checkinlog}
+          allSessionDates={checkinlog.map((c) => c.date)}
+          scheduleItems={scheduleItems}
+          kindvotes={kindvotes}
+          matchhistory={matchhistory}
+          canEdit={adminOn || profileMember.id === myId}
+          isAdmin={adminOn}
+          onSave={saveProfileFields}
+          onClose={() => setProfileMember(null)}
+        />
+      )}
     </div>
     </RequireLogin>
   );
