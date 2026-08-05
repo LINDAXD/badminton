@@ -14,6 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -22,7 +23,7 @@
 <script type="text/babel">
 
 function App() {
-  const { myId } = useIdentity();
+  const { myId, myName } = useIdentity();
   const { roster } = useRoster();
   const { adminOn, tryUnlock, lock } = useAdmin(isOfficerOf(roster, myId));
   const [rsvp, setRsvp] = React.useState({});
@@ -94,9 +95,35 @@ function App() {
     REFS.schedule.set({ items: schedule.filter((s) => s.id !== id) }).catch(() => {});
   }
 
+  function toggleAttend(item) {
+    if (!myId) {
+      window.alert("참석 체크를 하려면 먼저 홈에서 이름으로 입장해주세요.");
+      window.location.href = "./index.html#login";
+      return;
+    }
+    const attendees = item.attendees || [];
+    const already = attendees.some((a) => a.id === myId);
+    const nextAttendees = already
+      ? attendees.filter((a) => a.id !== myId)
+      : [...attendees, { id: myId, name: myName || "?" }];
+    REFS.schedule.set({
+      items: schedule.map((s) => (s.id === item.id ? { ...s, attendees: nextAttendees } : s)),
+    }).catch(() => {});
+  }
+
   return (
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
       <TopHeader title="☰ 더보기" subtitle="버디클럽의 다양한 기능들이에요" />
+
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <a href="./myinfo.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-stone-800">🙋 내 정보</p>
+            <p className="text-[11px] text-stone-400 mt-0.5">내가 올린 후기 · 경기 기록 · 참석한 일정 모아보기</p>
+          </div>
+          <span className="text-stone-300">&gt;</span>
+        </a>
+      </section>
 
       {/* highlight cards */}
       <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
@@ -127,17 +154,37 @@ function App() {
           <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">등록된 일정이 없어요.</p>
         ) : (
           <ul className="space-y-2 mb-2">
-            {[...schedule].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).map((s) => (
-              <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-stone-800">{s.title}</p>
-                  <p className="text-[11px] text-stone-400">
-                    {fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}{s.location ? ` · ${s.location}` : ""}
+            {[...schedule].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).map((s) => {
+              const attendees = s.attendees || [];
+              const iAmIn = myId && attendees.some((a) => a.id === myId);
+              return (
+                <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-stone-800 truncate">{s.title}</p>
+                      <p className="text-[11px] text-stone-400">
+                        {fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}{s.location ? ` · ${s.location}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleAttend(s)}
+                        className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border tap-scale ${
+                          iAmIn ? "text-white border-transparent" : "text-stone-400 border-stone-200"
+                        }`}
+                        style={iAmIn ? { backgroundColor: "#4CAF50" } : {}}
+                      >
+                        {iAmIn ? "✅ 참석중" : "참석하기"}
+                      </button>
+                      {adminOn && <button onClick={() => removeSchedule(s.id)} className="text-red-400 text-xs">삭제</button>}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-stone-400 mt-2">
+                    👥 참석 {attendees.length}명{attendees.length > 0 && `: ${attendees.map((a) => a.name).join(", ")}`}
                   </p>
-                </div>
-                {adminOn && <button onClick={() => removeSchedule(s.id)} className="text-red-400 text-xs">삭제</button>}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
         {adminOn && (

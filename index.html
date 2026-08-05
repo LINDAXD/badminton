@@ -14,6 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -262,9 +263,14 @@ function App() {
               </div>
               <div className="mt-3 pt-3 border-t border-stone-100 space-y-2">
                 <MyBirthdayField me={me} onSave={updateMyBirthday} />
-                <button onClick={changeMyPin} className="text-[11px] text-stone-400 underline underline-offset-2">
-                  🔑 비밀번호 변경
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={changeMyPin} className="text-[11px] text-stone-400 underline underline-offset-2">
+                    🔑 비밀번호 변경
+                  </button>
+                  <a href="./myinfo.html" className="text-[11px] text-stone-400 underline underline-offset-2">
+                    🙋 내 정보 보기
+                  </a>
+                </div>
               </div>
             </div>
           ) : (

@@ -14,6 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -135,13 +136,15 @@ function App() {
     let photoUrl = "";
     try {
       if (file) {
+        await window.authReady;
         const path = `reviews/${uid()}_${file.name}`;
         const ref = storage.ref(path);
         await ref.put(file);
         photoUrl = await ref.getDownloadURL();
       }
     } catch (e) {
-      window.alert("사진 업로드에 실패했어요. 글만 등록할게요.");
+      console.error(e);
+      window.alert(`사진 업로드에 실패했어요. (${e.code || e.message || "알 수 없는 오류"})\n글만 등록할게요.`);
     }
     const item = {
       id: uid(),

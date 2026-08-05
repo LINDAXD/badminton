@@ -14,6 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -358,6 +359,14 @@ function App() {
 
       const finished = { ...m, done: true };
       setHistory((hArr) => [{ ...finished, round: roundNum }, ...hArr]);
+      logMatchResult({
+        round: roundNum,
+        court: m.court,
+        teamA: m.teamA.map((p) => ({ id: p.id, name: p.name })),
+        teamB: m.teamB.map((p) => ({ id: p.id, name: p.name })),
+        scoreA: m.scoreA,
+        scoreB: m.scoreB,
+      });
 
       return { ...r, matches: r.matches.map((x) => (x.id === matchId ? finished : x)) };
     });

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>내 정보 | Birdie Club</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="./firebase.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
+<script type="text/babel">
+
+function App() {
+  const { myId, myName } = useIdentity();
+  const { roster } = useRoster();
+  const { adminOn } = useAdmin(isOfficerOf(roster, myId));
+  const [reviews, setReviews] = React.useState([]);
+  const [matchhistory, setMatchhistory] = React.useState([]);
+  const [schedule, setSchedule] = React.useState([]);
+  const [ready, setReady] = React.useState(false);
+  const [targetId, setTargetId] = React.useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id") || null;
+  }); // null = 나 자신
+
+  React.useEffect(() => {
+    const u1 = REFS.reviews.onSnapshot((s) => { const d = s.data(); setReviews(d && d.items ? d.items : []); });
+    const u2 = REFS.matchhistory.onSnapshot((s) => { const d = s.data(); setMatchhistory(d && d.items ? d.items : []); setReady(true); }, () => setReady(true));
+    const u3 = REFS.schedule.onSnapshot((s) => { const d = s.data(); setSchedule(d && d.items ? d.items : []); });
+    return () => { u1(); u2(); u3(); };
+  }, []);
+
+  const viewId = adminOn && targetId ? targetId : myId;
+  const viewMember = roster.find((m) => m.id === viewId);
+  const viewName = viewMember ? viewMember.name : (viewId === myId ? myName : "");
+
+  if (!myId) {
+    return (
+      <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+        <TopHeader title="🙋 내 정보" subtitle="내 활동을 모아볼 수 있어요" />
+        <section className="px-5 max-w-2xl mx-auto">
+          <div className="bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
+            <p className="text-sm text-stone-500 mb-3">먼저 홈에서 이름으로 입장해주세요.</p>
+            <a href="./index.html#login" className="inline-block text-white text-sm font-semibold px-5 py-2 rounded-full" style={{ backgroundColor: "#4CAF50" }}>
+              홈으로 가기
+            </a>
+          </div>
+        </section>
+        <BottomNav active="more" />
+      </div>
+    );
+  }
+
+  const myReviews = reviews.filter((r) => r.authorId === viewId);
+
+  const myMatches = matchhistory.filter(
+    (m) => (m.teamA || []).some((p) => p.id === viewId) || (m.teamB || []).some((p) => p.id === viewId)
+  );
+  let winCount = 0, loseCount = 0;
+  myMatches.forEach((m) => {
+    const inA = (m.teamA || []).some((p) => p.id === viewId);
+    const aWin = Number(m.scoreA) > Number(m.scoreB);
+    const won = (inA && aWin) || (!inA && !aWin);
+    if (won) winCount++; else loseCount++;
+  });
+
+  const myAttendedSchedule = schedule
+    .filter((s) => (s.attendees || []).some((a) => a.id === viewId))
+    .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+
+  return (
+    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+      <TopHeader title="🙋 내 정보" subtitle="내 활동을 한눈에 모아봐요" />
+
+      {adminOn && (
+        <section className="px-5 max-w-2xl mx-auto mb-4">
+          <div className="bg-white rounded-2xl p-3 border border-stone-200 flex items-center gap-2">
+            <span className="text-[11px] text-stone-400 shrink-0">🔍 회원 선택 (관리자)</span>
+            <select
+              value={targetId || ""}
+              onChange={(e) => setTargetId(e.target.value || null)}
+              className="flex-1 text-xs border border-stone-200 rounded-lg px-2 py-1.5"
+            >
+              <option value="">나 ({myName})</option>
+              {roster.filter((m) => m.id !== myId).map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+        </section>
+      )}
+
+      <section className="px-5 max-w-2xl mx-auto mb-2">
+        <p className="text-sm font-bold text-stone-800">
+          {viewId === myId ? "나" : viewName}
+          <span className="text-stone-400 font-normal">의 활동</span>
+        </p>
+      </section>
+
+      {/* match record */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <p className="text-xs font-bold text-stone-500 mb-2">🏆 경기 기록</p>
+        {!ready ? (
+          <Skeleton className="h-16 w-full" />
+        ) : (
+          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+            <div className="flex items-center gap-4 mb-3">
+              <div>
+                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{myMatches.length}</p>
+                <p className="text-[10px] text-stone-400">총 경기</p>
+              </div>
+              <div>
+                <p className="headfont text-xl text-stone-800">{winCount}승 {loseCount}패</p>
+                <p className="text-[10px] text-stone-400">전적</p>
+              </div>
+            </div>
+            {myMatches.length === 0 ? (
+              <p className="text-xs text-stone-400">아직 경기 기록이 없어요.</p>
+            ) : (
+              <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                {myMatches.slice(0, 10).map((m) => (
+                  <li key={m.id} className="text-xs text-stone-500 flex items-center justify-between">
+                    <span>{fmtDate(m.date)} · R{m.round}</span>
+                    <span>{(m.teamA || []).map((p) => p.name).join("·")} {m.scoreA}:{m.scoreB} {(m.teamB || []).map((p) => p.name).join("·")}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* schedule attendance */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <p className="text-xs font-bold text-stone-500 mb-2">🗓️ 참석한 일정</p>
+        {myAttendedSchedule.length === 0 ? (
+          <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">참석한 일정이 없어요.</p>
+        ) : (
+          <ul className="space-y-2">
+            {myAttendedSchedule.map((s) => (
+              <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200">
+                <p className="text-sm font-semibold text-stone-800">{s.title}</p>
+                <p className="text-[11px] text-stone-400">{fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}{s.location ? ` · ${s.location}` : ""}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* my reviews */}
+      <section className="px-5 max-w-2xl mx-auto mb-8">
+        <p className="text-xs font-bold text-stone-500 mb-2">📸 올린 후기</p>
+        {myReviews.length === 0 ? (
+          <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">
+            아직 올린 후기가 없어요.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {myReviews.map((r) => (
+              <li key={r.id} className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+                {r.photoUrl && <img src={r.photoUrl} alt="후기 사진" className="w-full max-h-56 object-cover" />}
+                <div className="p-3">
+                  {r.text && <p className="text-sm text-stone-700 whitespace-pre-wrap">{r.text}</p>}
+                  <p className="text-[11px] text-stone-400 mt-1">{r.date}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <BottomNav active="more" />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

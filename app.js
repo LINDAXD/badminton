@@ -117,6 +117,15 @@ function logAttendance(memberId) {
   }).catch(() => {});
 }
 
+// ---------- 경기 결과 기록 (내 정보 > 경기 기록용) ----------
+function logMatchResult(record) {
+  REFS.matchhistory.get().then((snap) => {
+    const data = snap.data() || {};
+    const items = data.items || [];
+    REFS.matchhistory.set({ items: [{ id: uid(), date: todayStr(), ...record }, ...items] }).catch(() => {});
+  }).catch(() => {});
+}
+
 // ---------- 하단 고정 내비게이션 ----------
 function BottomNav({ active }) {
   const items = [
