@@ -300,7 +300,18 @@ function App() {
     const next = { ...rsvp, [memberId]: status };
     setRsvp(next);
     CHECKIN_REF.set({ data: next }).catch(() => {});
-    if (status === "in") logAttendance(memberId);
+    if (status === "in") {
+      logAttendance(memberId);
+      // 참석으로 표시하면 자동으로 오늘 참석자(매칭 대상) 명단에도 들어가요 — 따로 또 누를 필요 없어요
+      setPlayers((p) => {
+        if (p.some((x) => x.id === memberId)) return p;
+        const m = roster.find((r) => r.id === memberId);
+        if (!m) return p;
+        return [...p, { id: m.id, name: m.name, gamesPlayed: 0, wins: 0, losses: 0 }];
+      });
+    } else if (status === "out") {
+      setPlayers((p) => p.filter((x) => x.id !== memberId));
+    }
   }
 
   function toggleRestWish(memberId) {
@@ -317,9 +328,10 @@ function App() {
   }
 
   function resetCheckins() {
-    if (!window.confirm("모든 체크인 기록을 초기화할까요? (참석/불참 전부 지워짐)")) return;
+    if (!window.confirm("모든 체크인 기록을 초기화할까요? (참석/불참 전부 지워지고, 참석자 명단도 비워져요)")) return;
     setRsvp({});
     CHECKIN_REF.set({ data: {} }).catch(() => {});
+    setPlayers([]);
   }
 
   const backupCode = roster.map((m) => m.name).join(",");
@@ -376,10 +388,7 @@ function App() {
     setAddError("");
     const member = { id: uid(), name };
     persistRoster([...roster, member]);
-    setPlayers((p) => [
-      ...p,
-      { id: member.id, name: member.name, gamesPlayed: 0, wins: 0, losses: 0 },
-    ]);
+    setMyRsvp(member.id, "in");
     setNameInput("");
   }
 
@@ -389,15 +398,12 @@ function App() {
   }
 
   function toggleAttend(member) {
-    setPlayers((p) =>
-      p.some((x) => x.id === member.id)
-        ? p.filter((x) => x.id !== member.id)
-        : [...p, { id: member.id, name: member.name, gamesPlayed: 0, wins: 0, losses: 0 }]
-    );
+    const already = players.some((x) => x.id === member.id);
+    setMyRsvp(member.id, already ? "out" : "in");
   }
 
   function removePlayer(id) {
-    setPlayers((p) => p.filter((x) => x.id !== id));
+    setMyRsvp(id, "out");
   }
 
   const [justShuffled, setJustShuffled] = useState(false);
@@ -675,7 +681,7 @@ function App() {
 
           <div>
             <p className="text-sm font-semibold mb-2">오늘 참석자 ({players.length}명)</p>
-            <p className="text-[11px] text-[#4CAF50] mb-1">🔄 체크인에서 "참석" 누르면 자동으로 여기 반영돼요.</p>
+            <p className="text-[11px] text-[#4CAF50] mb-1">✅ 여기서 이름을 탭하면 바로 참석 처리돼요 — 따로 체크인 안 눌러도 매칭에 자동으로 들어가요.</p>
             <p className="text-[11px] text-stone-400 mb-2">🔥상위 · ➖중위 · 🌱하위 등급으로 나눠서, 매칭 생성할 때 자동으로 실력 밸런스를 맞춰요. (최소 {MIN_GAMES_FOR_TIER}경기 이상부터 등급 계산돼요)</p>
             {players.length === 0 ? (
               <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
@@ -759,7 +765,7 @@ function App() {
                 </button>
               )}
             </div>
-            <p className="text-xs text-stone-400 mb-3">본인 이름 버튼만 눌려요. 실시간으로 다 같이 봐요.</p>
+            <p className="text-xs text-stone-400 mb-3">참석자 탭에서 이름을 탭해도 여기 자동 반영돼요. 본인 이름 버튼만 직접 누를 수 있어요.</p>
             {!rosterReady ? (
               <p className="text-xs text-stone-400">불러오는 중...</p>
             ) : roster.length === 0 ? (
