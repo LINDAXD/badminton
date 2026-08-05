@@ -43,6 +43,41 @@ function isOfficerOf(roster, myId) {
   return !!(me && me.grade === "운영진");
 }
 
+// 지정한 시간(ms) 안에 안 끝나면 강제로 실패 처리 — 업로드가 무한정 멈춰있는 것을 방지
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label || "요청"} 응답이 없어요 (시간 초과). 설정을 확인해주세요.`)), ms)
+    ),
+  ]);
+}
+
+// ---------- 사진 업로드 (Cloudinary, 카드 등록 없이 무료) ----------
+async function uploadToCloudinary(file) {
+  const { cloudName, uploadPreset } = window.CLOUDINARY || {};
+  if (!cloudName || cloudName.includes("여기에") || !uploadPreset || uploadPreset.includes("여기에")) {
+    throw new Error("Cloudinary 설정이 안 되어있어요 (firebase.js의 CLOUDINARY 값을 채워주세요)");
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+  const res = await withTimeout(
+    fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: "POST",
+      body: formData,
+    }),
+    20000,
+    "사진 업로드"
+  );
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error((errBody.error && errBody.error.message) || `업로드 실패 (${res.status})`);
+  }
+  const data = await res.json();
+  return data.secure_url;
+}
+
 // ---------- 관리자 잠금 훅 ----------
 // isOfficer: 로그인한 회원의 등급이 "운영진"이면 비밀번호 없이도 자동으로 관리자 권한을 가짐
 function useAdmin(isOfficer) {
