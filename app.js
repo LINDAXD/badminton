@@ -26,6 +26,341 @@ function fmtMoney(n) {
   return num.toLocaleString("ko-KR") + "원";
 }
 
+// 후기의 사진들을 배열로 반환 (새 형식 photoUrls / 예전 형식 photoUrl 둘 다 지원)
+function photosOf(r) {
+  if (r.photoUrls && r.photoUrls.length) return r.photoUrls;
+  if (r.photoUrl) return [r.photoUrl];
+  return [];
+}
+
+// ---------- 배지 시스템 (확장 가능한 구조) ----------
+// 새 배지를 추가하려면 이 배열에 항목만 추가하면 돼요. earn(stats, member)이 true를 반환하면 획득.
+// stats: { totalCount, streak, lastDate, noShow, rate, weeksAttendedThisMonth, isFirstWeek }
+window.BADGE_DEFS = [
+  { key: "first", emoji: "🌱", label: "첫 참석", earn: (s) => s.totalCount >= 1 },
+  { key: "streak5", emoji: "🔥", label: "5회 연속 참석", earn: (s) => s.streak >= 5 },
+  { key: "everyWeek", emoji: "💯", label: "매주 참석", earn: (s) => s.weeksAttendedThisMonth >= 4 },
+  { key: "mvp", emoji: "⭐", label: "MVP", earn: (s, m) => !!(m && m.manualBadges && m.manualBadges.mvp) },
+  { key: "chat", emoji: "🏸", label: "소통왕", earn: (s, m) => !!(m && m.manualBadges && m.manualBadges.chat) },
+  { key: "kind", emoji: "🤝", label: "친절왕", earn: (s, m) => !!(m && m.manualBadges && m.manualBadges.kind) || (s.kindVotes || 0) >= 5 },
+  { key: "birthdayWeek", emoji: "🎂", label: "생일 주간", earn: (s, m) => {
+    if (!m || !m.birthday || m.birthday.length !== 4) return false;
+    const now = new Date();
+    const bm = parseInt(m.birthday.slice(0, 2), 10), bd = parseInt(m.birthday.slice(2, 4), 10);
+    const bday = new Date(now.getFullYear(), bm - 1, bd);
+    const diff = Math.abs((now - bday) / 86400000);
+    return diff <= 3;
+  } },
+  { key: "king", emoji: "🏆", label: "출석왕", earn: (s) => !!s.isAttendanceKing },
+];
+
+// checkinlog(항목: {memberId, date})를 바탕으로 한 회원의 출석 통계를 계산해요.
+// allSessionDates: 클럽 전체에서 실제로 모임이 있었던 날짜 목록(=checkinlog에 등장하는 모든 날짜, 중복 제거)
+function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
+  const myDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
+  const totalCount = myDates.size;
+  const sortedMine = [...myDates].sort();
+  const lastDate = sortedMine.length ? sortedMine[sortedMine.length - 1] : null;
+
+  // 연속 출석: 전체 모임 개최일(최신순)을 하나씩 확인하며, 이 회원이 그날 참석했는지를 체크.
+  // 참석 안 한 날이 나오는 순간 멈춰요.
+  const sessionsDesc = [...new Set(allSessionDates)].sort().reverse();
+  let streak = 0;
+  for (const d of sessionsDesc) {
+    if (myDates.has(d)) streak++;
+    else break;
+  }
+
+  const thisMonth = todayStr().slice(0, 7);
+  const weeksAttendedThisMonth = new Set(
+    sortedMine.filter((d) => d.slice(0, 7) === thisMonth).map((d) => {
+      const dt = new Date(d);
+      const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1);
+      return Math.ceil((dt.getDate() + firstDay.getDay()) / 7);
+    })
+  ).size;
+
+  const totalSessions = sessionsDesc.length;
+  const noShowCount = 0; // 노쇼는 일정 RSVP 데이터가 있어야 계산 가능 — more.html에서 별도 계산
+  const rate = totalSessions > 0 ? Math.round((totalCount / totalSessions) * 100) : 0;
+
+  return { totalCount, streak, lastDate, weeksAttendedThisMonth, rate, totalSessions };
+}
+
+// 노쇼: 일정에 "✅참석"으로 RSVP하고(정원 안에 들었는데도) 실제로는 체크인 기록이 없는 경우
+function computeNoShowCount(memberId, scheduleItems, checkinlog) {
+  const today = todayStr();
+  const attendedDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
+  let count = 0;
+  (scheduleItems || []).forEach((s) => {
+    if (!s.date || s.date >= today) return; // 지난 일정만 카운트
+    const rsvpList = s.rsvp || [];
+    const mine = rsvpList.find((r) => r.id === memberId);
+    if (!mine || mine.status !== "in") return;
+    if (s.capacity) {
+      const confirmedIds = rsvpList
+        .filter((r) => r.status === "in")
+        .sort((a, b) => a.at - b.at)
+        .slice(0, s.capacity)
+        .map((r) => r.id);
+      if (!confirmedIds.includes(memberId)) return; // 대기자였으면 노쇼로 안 셈
+    }
+    if (!attendedDates.has(s.date)) count++;
+  });
+  return count;
+}
+
+function earnedBadges(member, stats) {
+  return window.BADGE_DEFS.filter((b) => {
+    try { return b.earn(stats, member); } catch (e) { return false; }
+  });
+}
+
+function computeKindVotes(memberId, kindvotes) {
+  return (kindvotes || []).filter((v) => v.votedForId === memberId).length;
+}
+
+// 이 회원이 지금까지 누구랑 몇 번이나 팀(파트너)이었는지 상위 N명
+function topPartners(memberId, matchhistory, n) {
+  const counts = {};
+  (matchhistory || []).forEach((m) => {
+    const inA = (m.teamA || []).some((p) => p.id === memberId);
+    const inB = (m.teamB || []).some((p) => p.id === memberId);
+    if (!inA && !inB) return;
+    const teammates = inA ? (m.teamA || []) : (m.teamB || []);
+    teammates.forEach((p) => {
+      if (p.id === memberId) return;
+      counts[p.id] = counts[p.id] || { name: p.name, count: 0 };
+      counts[p.id].count++;
+    });
+  });
+  return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, n || 3);
+}
+
+const SOCIAL_TAGS = [
+  { key: "meal", emoji: "🍜", label: "운동 후 식사 가능" },
+  { key: "coffee", emoji: "☕", label: "운동 후 커피 가능" },
+  { key: "car", emoji: "🚗", label: "차량 보유" },
+  { key: "racket", emoji: "🏸", label: "라켓 대여 가능" },
+];
+window.SOCIAL_TAGS = SOCIAL_TAGS;
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+window.WEEKDAYS = WEEKDAYS;
+
+// ---------- 회원 프로필 카드 (클릭하면 열리는 모달) ----------
+function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems, kindvotes, matchhistory, canEdit, isAdmin, onSave, onClose }) {
+  const [edit, setEdit] = useState(false);
+  const [bio, setBio] = useState(member.bio || "");
+  const [career, setCareer] = useState(member.career || "");
+  const [activeDay, setActiveDay] = useState(member.activeDay || "");
+  const [social, setSocial] = useState(member.social || {});
+  const [uploading, setUploading] = useState(false);
+
+  const stats = computeAttendanceStats(member.id, checkinlog, allSessionDates);
+  stats.kindVotes = computeKindVotes(member.id, kindvotes);
+  const badges = earnedBadges(member, stats);
+  const noShowCount = computeNoShowCount(member.id, scheduleItems || [], checkinlog);
+  const partners = topPartners(member.id, matchhistory || [], 3);
+
+  function toggleManualBadge(key) {
+    const manualBadges = { ...(member.manualBadges || {}), [key]: !(member.manualBadges || {})[key] };
+    onSave({ manualBadges });
+  }
+
+  function toggleSocial(key) {
+    setSocial((s) => ({ ...s, [key]: !s[key] }));
+  }
+
+  function save() {
+    onSave({ bio, career, activeDay, social });
+    setEdit(false);
+  }
+
+  async function handlePhotoChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadToCloudinary(file);
+      onSave({ photoUrl: url });
+    } catch (err) {
+      window.alert("사진 업로드에 실패했어요. (" + (err.message || "") + ")");
+    }
+    setUploading(false);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[88vh] overflow-y-auto rise-in" onClick={(e) => e.stopPropagation()}>
+        <div className="p-5">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center overflow-hidden shrink-0">
+                {member.photoUrl ? (
+                  <img src={member.photoUrl} className="w-full h-full object-cover" alt={member.name} />
+                ) : (
+                  <span className="text-2xl">🏸</span>
+                )}
+              </div>
+              <div>
+                <p className="text-lg font-bold text-stone-900">{member.name}</p>
+                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                  <GradeBadge grade={member.grade} />
+                  {member.level && <span className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded-full px-2 py-0.5">{member.level}</span>}
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-stone-400 text-xl leading-none px-1">✕</button>
+          </div>
+
+          {canEdit && (
+            <div className="mb-3">
+              <label className="text-[11px] text-stone-400 underline underline-offset-2 cursor-pointer">
+                📸 프로필 사진 {uploading ? "업로드 중..." : "바꾸기"}
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} disabled={uploading} />
+              </label>
+            </div>
+          )}
+
+          {edit ? (
+            <div className="space-y-2 mb-4">
+              <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="한 줄 소개" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <input value={career} onChange={(e) => setCareer(e.target.value)} placeholder="배드민턴 경력 (예: 2년차)" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <select value={activeDay} onChange={(e) => setActiveDay(e.target.value)} className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm">
+                <option value="">주 활동 요일 선택</option>
+                {WEEKDAYS.map((d) => <option key={d} value={d}>{d}요일</option>)}
+              </select>
+              <div>
+                <p className="text-[11px] text-stone-400 mb-1">친목 태그</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SOCIAL_TAGS.map((t) => (
+                    <button key={t.key} onClick={() => toggleSocial(t.key)}
+                      className={`text-xs px-2.5 py-1.5 rounded-full border ${social[t.key] ? "text-white border-transparent" : "bg-white text-stone-500 border-stone-200"}`}
+                      style={social[t.key] ? { backgroundColor: "#4CAF50" } : {}}>
+                      {t.emoji} {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={save} className="flex-1 rounded-lg py-2 text-sm font-semibold text-white" style={{ backgroundColor: "#4CAF50" }}>저장</button>
+                <button onClick={() => setEdit(false)} className="flex-1 rounded-lg py-2 text-sm font-semibold border border-stone-200 text-stone-500">취소</button>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4">
+              <p className="text-sm text-stone-600 mb-2">{member.bio || (canEdit ? "한 줄 소개를 등록해보세요." : "한 줄 소개가 없어요.")}</p>
+              {(member.social && Object.values(member.social).some(Boolean)) && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {SOCIAL_TAGS.filter((t) => member.social[t.key]).map((t) => (
+                    <span key={t.key} className="text-[11px] bg-stone-50 border border-stone-200 rounded-full px-2 py-1">{t.emoji} {t.label}</span>
+                  ))}
+                </div>
+              )}
+              {canEdit && (
+                <button onClick={() => setEdit(true)} className="text-[11px] text-stone-400 underline underline-offset-2">✏️ 프로필 수정</button>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">가입일</p>
+              <p className="text-sm font-semibold text-stone-800">{member.joinedAt ? fmtDate(member.joinedAt) : "-"}</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">생일</p>
+              <p className="text-sm font-semibold text-stone-800">{member.birthday ? fmtBirthday(member.birthday) : "-"}</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">경력</p>
+              <p className="text-sm font-semibold text-stone-800">{member.career || "-"}</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">주 활동 요일</p>
+              <p className="text-sm font-semibold text-stone-800">{member.activeDay ? `${member.activeDay}요일` : "-"}</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">📅 참석 횟수</p>
+              <p className="text-sm font-semibold text-stone-800">{stats.totalCount}회</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">🔥 연속 출석</p>
+              <p className="text-sm font-semibold text-stone-800">{stats.streak}회</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">마지막 참석일</p>
+              <p className="text-sm font-semibold text-stone-800">{stats.lastDate ? fmtDate(stats.lastDate) : "-"}</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">참석률</p>
+              <p className="text-sm font-semibold text-stone-800">{stats.rate}%</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">🚫 노쇼</p>
+              <p className="text-sm font-semibold text-stone-800">{noShowCount}회</p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3">
+              <p className="text-[11px] text-stone-400">👍 또 치고싶어요</p>
+              <p className="text-sm font-semibold text-stone-800">{stats.kindVotes}표</p>
+            </div>
+          </div>
+
+          {partners.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[11px] text-stone-400 mb-1.5">🤝 자주 함께한 사람</p>
+              <div className="flex flex-wrap gap-1.5">
+                {partners.map((p) => (
+                  <span key={p.name} className="text-xs bg-stone-50 border border-stone-200 text-stone-600 rounded-full px-2.5 py-1">
+                    {p.name} · {p.count}번
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mb-4">
+            <p className="text-[11px] text-stone-400 mb-1.5">🏅 획득 배지</p>
+            {badges.length === 0 ? (
+              <p className="text-xs text-stone-300">아직 획득한 배지가 없어요.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {badges.map((b) => (
+                  <span key={b.key} className="text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-full px-2.5 py-1">
+                    {b.emoji} {b.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {isAdmin && (
+            <div>
+              <p className="text-[11px] text-stone-400 mb-1.5">🛠️ 관리자: 배지 수동 지급</p>
+              <div className="flex flex-wrap gap-1.5">
+                {window.BADGE_DEFS.filter((b) => ["mvp", "chat", "kind"].includes(b.key)).map((b) => {
+                  const has = !!(member.manualBadges && member.manualBadges[b.key]);
+                  return (
+                    <button
+                      key={b.key}
+                      onClick={() => toggleManualBadge(b.key)}
+                      className={`text-xs px-2.5 py-1.5 rounded-full border tap-scale ${has ? "text-white border-transparent" : "bg-white text-stone-500 border-stone-200"}`}
+                      style={has ? { backgroundColor: "#4CAF50" } : {}}
+                    >
+                      {b.emoji} {b.label} {has ? "· 지급됨" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function fmtDate(d) {
   if (!d) return "";
   const [y, m, day] = d.split("-");

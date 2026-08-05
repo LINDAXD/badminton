@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>통계 | Birdie</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./style.css" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="./firebase.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="./app.js"></script>
+<script type="text/babel">
+
+function App() {
+  const { myId } = useIdentity();
+  const { roster } = useRoster();
+  const { adminOn } = useAdmin(isOfficerOf(roster, myId));
+  const [checkinlog, setCheckinlog] = React.useState([]);
+  const [ready, setReady] = React.useState(false);
+
+  React.useEffect(() => {
+    const unsub = REFS.checkinlog.onSnapshot((snap) => {
+      const data = snap.data();
+      setCheckinlog(data && data.items ? data.items : []);
+      setReady(true);
+    }, () => setReady(true));
+    return () => unsub();
+  }, []);
+
+  // 날짜별 참석 인원수
+  const countByDate = {};
+  checkinlog.forEach((c) => { countByDate[c.date] = (countByDate[c.date] || 0) + 1; });
+  const allDates = Object.keys(countByDate);
+
+  // 요일별 평균 참석 인원
+  const weekdaySums = [0, 0, 0, 0, 0, 0, 0];
+  const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+  allDates.forEach((d) => {
+    const day = new Date(d).getDay();
+    weekdaySums[day] += countByDate[d];
+    weekdayCounts[day]++;
+  });
+  const weekdayAverages = WEEKDAYS.map((label, i) => ({
+    label,
+    avg: weekdayCounts[i] > 0 ? Math.round((weekdaySums[i] / weekdayCounts[i]) * 10) / 10 : 0,
+    sessions: weekdayCounts[i],
+  }));
+  const bestWeekday = [...weekdayAverages].filter((w) => w.sessions > 0).sort((a, b) => b.avg - a.avg)[0];
+
+  // 이번 달 출석 순위
+  const thisMonth = todayStr().slice(0, 7);
+  const lastMonthDate = new Date();
+  lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+  const lastMonth = lastMonthDate.toISOString().slice(0, 7);
+
+  const monthCounts = {};
+  checkinlog.filter((c) => c.date.slice(0, 7) === thisMonth).forEach((c) => {
+    monthCounts[c.memberId] = (monthCounts[c.memberId] || 0) + 1;
+  });
+  const monthRanking = Object.keys(monthCounts)
+    .map((id) => ({ id, count: monthCounts[id], member: roster.find((m) => m.id === id) }))
+    .filter((r) => r.member)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  // 재참여율: 저번 달에 참석한 사람 중 이번 달에도 참석한 비율
+  const lastMonthAttendees = new Set(checkinlog.filter((c) => c.date.slice(0, 7) === lastMonth).map((c) => c.memberId));
+  const thisMonthAttendees = new Set(checkinlog.filter((c) => c.date.slice(0, 7) === thisMonth).map((c) => c.memberId));
+  let retained = 0;
+  lastMonthAttendees.forEach((id) => { if (thisMonthAttendees.has(id)) retained++; });
+  const retentionRate = lastMonthAttendees.size > 0 ? Math.round((retained / lastMonthAttendees.size) * 100) : null;
+
+  // 신규 회원 수 (이번 달)
+  const newThisMonth = roster.filter((m) => m.joinedAt && m.joinedAt.slice(0, 7) === thisMonth).length;
+
+  // 평균 참석 인원 (전체 기간)
+  const avgAttendance = allDates.length > 0
+    ? Math.round((allDates.reduce((sum, d) => sum + countByDate[d], 0) / allDates.length) * 10) / 10
+    : 0;
+
+  // 명예의 전당: 통산 출석 top 3
+  const allTimeCounts = {};
+  checkinlog.forEach((c) => { allTimeCounts[c.memberId] = (allTimeCounts[c.memberId] || 0) + 1; });
+  const hallOfFame = Object.keys(allTimeCounts)
+    .map((id) => ({ id, count: allTimeCounts[id], member: roster.find((m) => m.id === id) }))
+    .filter((r) => r.member)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  return (
+    <RequireLogin myId={myId}>
+    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
+      <TopHeader title="📊 통계" subtitle="버디 활동을 숫자로 확인해요" />
+
+      {!ready ? (
+        <section className="px-5 max-w-2xl mx-auto space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </section>
+      ) : allDates.length === 0 ? (
+        <section className="px-5 max-w-2xl mx-auto">
+          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
+            아직 출석 데이터가 없어요.
+          </p>
+        </section>
+      ) : (
+        <>
+          {/* 요약 카드 */}
+          <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
+            <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+              <p className="text-[11px] text-stone-400 mb-1">평균 참석 인원</p>
+              <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{avgAttendance}<span className="text-xs text-stone-400 font-normal">명</span></p>
+            </div>
+            <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+              <p className="text-[11px] text-stone-400 mb-1">이번 달 신규 회원</p>
+              <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{newThisMonth}<span className="text-xs text-stone-400 font-normal">명</span></p>
+            </div>
+            <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+              <p className="text-[11px] text-stone-400 mb-1">가장 활발한 요일</p>
+              <p className="text-sm font-bold text-stone-800">{bestWeekday && bestWeekday.sessions > 0 ? `${bestWeekday.label}요일` : "-"}</p>
+              {bestWeekday && bestWeekday.sessions > 0 && <p className="text-[11px] text-stone-400">평균 {bestWeekday.avg}명</p>}
+            </div>
+            <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+              <p className="text-[11px] text-stone-400 mb-1">재참여율</p>
+              <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{retentionRate === null ? "-" : `${retentionRate}%`}</p>
+              <p className="text-[11px] text-stone-400">저번 달 참석자 중 이번 달도</p>
+            </div>
+          </section>
+
+          {/* 요일별 평균 */}
+          <section className="px-5 max-w-2xl mx-auto mb-6">
+            <p className="text-sm font-bold text-stone-700 mb-2">📅 요일별 평균 참석</p>
+            <div className="bg-white rounded-2xl p-4 border border-stone-200">
+              <div className="flex items-end justify-between gap-1.5" style={{ height: "120px" }}>
+                {weekdayAverages.map((w) => {
+                  const maxAvg = Math.max(...weekdayAverages.map((x) => x.avg), 1);
+                  const barHeight = w.avg > 0 ? Math.max(8, (w.avg / maxAvg) * 100) : 4;
+                  return (
+                    <div key={w.label} className="flex-1 flex flex-col items-center justify-end h-full">
+                      <span className="text-[10px] text-stone-500 mb-1">{w.avg > 0 ? w.avg : ""}</span>
+                      <div
+                        className="w-full rounded-t-md"
+                        style={{ height: `${barHeight}%`, backgroundColor: w.avg > 0 ? "#4CAF50" : "#eee" }}
+                      />
+                      <span className="text-[11px] text-stone-400 mt-1">{w.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* 이번 달 출석 순위 */}
+          <section className="px-5 max-w-2xl mx-auto mb-6">
+            <p className="text-sm font-bold text-stone-700 mb-2">🏅 이번 달 출석왕</p>
+            {monthRanking.length === 0 ? (
+              <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">이번 달 출석 기록이 없어요.</p>
+            ) : (
+              <ul className="space-y-2">
+                {monthRanking.map((r, i) => (
+                  <li key={r.id} className="bg-white rounded-xl px-4 py-2.5 border border-stone-200 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="scorefont text-sm text-stone-400 w-4">{i + 1}</span>
+                      <span className="text-sm font-medium text-stone-800">{r.member.name}</span>
+                    </div>
+                    <span className="text-xs text-stone-500 scorefont">{r.count}회</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* 명예의 전당 */}
+          <section className="px-5 max-w-2xl mx-auto mb-8">
+            <p className="text-sm font-bold text-stone-700 mb-2">🏆 명예의 전당 (통산)</p>
+            {hallOfFame.length === 0 ? (
+              <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">아직 기록이 없어요.</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {hallOfFame.map((r, i) => (
+                  <div key={r.id} className="rise-in rounded-2xl p-3 text-center" style={{ backgroundColor: i === 0 ? "#FFFBEA" : "#FAFAFA", border: i === 0 ? "1px solid #FFD54F" : "1px solid #eee" }}>
+                    <p className="text-2xl mb-1">{i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}</p>
+                    <p className="text-sm font-bold text-stone-800 truncate">{r.member.name}</p>
+                    <p className="text-[11px] text-stone-400">{r.count}회</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      <BottomNav active="more" />
+    </div>
+    </RequireLogin>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
