@@ -35,6 +35,7 @@ window.REFS = {
   checkinlog: db.collection("badminton").doc("checkinlog"), // 출석 이력(출석왕 계산용)
   reviews: db.collection("badminton").doc("reviews"),       // 모임 후기
   matchhistory: db.collection("badminton").doc("matchhistory"), // 랜덤매칭 경기 기록 (내 정보용)
+  statsadjust: db.collection("badminton").doc("statsadjust"), // 관리자의 개인 전적 수동 보정값
 };
 
 // ---- 공통 상수 ----

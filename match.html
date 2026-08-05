@@ -13,8 +13,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -123,6 +121,8 @@ function App() {
   const [syncMsg, setSyncMsg] = useState("");
   const [rsvp, setRsvp] = useState({});
   const [restWish, setRestWish] = useState({});
+  const [matchhistory, setMatchhistory] = useState([]);
+  const [statsAdjust, setStatsAdjust] = useState({});
   const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
   const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
   const ADMIN_PIN = window.ADMIN_PIN;
@@ -172,12 +172,73 @@ function App() {
       setRestWish(data && data.data ? data.data : {});
     });
 
+    const unsub4 = REFS.matchhistory.onSnapshot((snap) => {
+      const data = snap.data();
+      setMatchhistory(data && data.items ? data.items : []);
+    });
+
+    const unsub5 = REFS.statsadjust.onSnapshot((snap) => {
+      const data = snap.data();
+      setStatsAdjust(data && data.data ? data.data : {});
+    });
+
     return () => {
       unsub1();
       unsub2();
       unsub3();
+      unsub4();
+      unsub5();
     };
   }, []);
+
+  // 통산 전적(승/패/경기수) — matchhistory(영구 저장)에서 계산 + 관리자 수동 보정값 반영
+  function lifetimeStatsFor(id) {
+    let games = 0, wins = 0, losses = 0;
+    matchhistory.forEach((m) => {
+      const inA = (m.teamA || []).some((p) => p.id === id);
+      const inB = (m.teamB || []).some((p) => p.id === id);
+      if (!inA && !inB) return;
+      games++;
+      const aWin = Number(m.scoreA) > Number(m.scoreB);
+      const won = (inA && aWin) || (inB && !aWin);
+      if (won) wins++; else losses++;
+    });
+    const adj = statsAdjust[id];
+    if (adj) {
+      wins += adj.winsAdj || 0;
+      losses += adj.lossesAdj || 0;
+      games += (adj.winsAdj || 0) + (adj.lossesAdj || 0);
+    }
+    return { games, wins: Math.max(0, wins), losses: Math.max(0, losses) };
+  }
+
+  // 관리자가 개인 전적을 직접 원하는 값으로 고쳐요 (실제 경기기록은 그대로 두고, 보정값만 얹어요)
+  function correctPlayerStats(p) {
+    const current = lifetimeStatsFor(p.id);
+    const winInput = window.prompt(`${p.name}님의 정확한 승 수를 입력해주세요`, String(current.wins));
+    if (winInput === null) return;
+    const lossInput = window.prompt(`${p.name}님의 정확한 패 수를 입력해주세요`, String(current.losses));
+    if (lossInput === null) return;
+    const newWins = parseInt(winInput, 10);
+    const newLosses = parseInt(lossInput, 10);
+    if (isNaN(newWins) || isNaN(newLosses) || newWins < 0 || newLosses < 0) {
+      window.alert("숫자를 정확히 입력해주세요.");
+      return;
+    }
+    // 실제 경기기록 기준값과의 차이를 보정값으로 저장
+    let rawGames = 0, rawWins = 0, rawLosses = 0;
+    matchhistory.forEach((m) => {
+      const inA = (m.teamA || []).some((x) => x.id === p.id);
+      const inB = (m.teamB || []).some((x) => x.id === p.id);
+      if (!inA && !inB) return;
+      const aWin = Number(m.scoreA) > Number(m.scoreB);
+      const won = (inA && aWin) || (inB && !aWin);
+      if (won) rawWins++; else rawLosses++;
+    });
+    const next = { ...statsAdjust, [p.id]: { winsAdj: newWins - rawWins, lossesAdj: newLosses - rawLosses } };
+    setStatsAdjust(next);
+    REFS.statsadjust.set({ data: next }).catch(() => {});
+  }
 
   // auto-sync: anyone who checks in as "참석" gets added to today's players automatically
   useEffect(() => {
@@ -572,7 +633,9 @@ function App() {
               </p>
             ) : (
               <ul className="space-y-2">
-                {players.map((p) => (
+                {players.map((p) => {
+                  const stats = lifetimeStatsFor(p.id);
+                  return (
                   <li
                     key={p.id}
                     className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200"
@@ -580,12 +643,13 @@ function App() {
                     <div>
                       <p className="text-sm font-medium">{p.name}</p>
                       <p className="text-xs text-stone-400 scorefont">
-                        {p.gamesPlayed}경기 · {p.wins}승 {p.losses}패
+                        오늘 {p.gamesPlayed}경기 · 통산 {stats.wins}승 {stats.losses}패
                       </p>
                     </div>
                     <button onClick={() => removePlayer(p.id)} className="text-red-500">✕</button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -768,7 +832,12 @@ function App() {
 
               <div className="bg-white rounded-2xl p-4 border border-stone-200">
                 <p className="text-xs font-semibold text-stone-500 mb-1">다음 라운드는 쉴래요</p>
-                <p className="text-xs text-stone-400 mb-2">본인 이름만 눌려요. 누르면 다음 매칭 생성할 때 자동으로 쉬는 사람에 들어가요.</p>
+                <p className="text-xs text-stone-400 mb-2">본인 이름만 눌려요. 누르면 다음 매칭 생성할 때 자동으로 쉬는 사람에 들어가요. 아래 목록은 관리자를 포함해 모두에게 실시간으로 보여요.</p>
+                {Object.keys(restWish).length > 0 && (
+                  <p className="text-xs font-semibold mb-2" style={{ color: "#4CAF50" }}>
+                    ✋ 쉬고 싶어하는 사람: {players.filter((p) => restWish[p.id]).map((p) => p.name).join(", ") || "-"}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {players.map((p) => {
                     const wantsRest = !!restWish[p.id];
@@ -805,17 +874,26 @@ function App() {
       {tab === "record" && (
         <section className="px-5 mt-5 space-y-5">
           <div>
-            <p className="text-sm font-semibold mb-2">🏆 순위</p>
+            <p className="text-sm font-semibold mb-2">🏆 통산 순위</p>
+            <p className="text-[11px] text-stone-400 mb-2">기록은 저장돼서 새로고침해도 사라지지 않아요.</p>
             <ul className="space-y-2">
               {[...players]
-                .sort((a, b) => b.wins - a.wins || b.gamesPlayed - a.gamesPlayed)
+                .map((p) => ({ ...p, stats: lifetimeStatsFor(p.id) }))
+                .sort((a, b) => b.stats.wins - a.stats.wins || b.stats.games - a.stats.games)
                 .map((p, i) => (
                   <li key={p.id} className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200">
                     <div className="flex items-center gap-3">
                       <span className="scorefont text-sm text-stone-400 w-4">{i + 1}</span>
                       <span className="text-sm font-medium">{p.name}</span>
                     </div>
-                    <span className="scorefont text-sm text-stone-500">{p.wins}승 {p.losses}패</span>
+                    <div className="flex items-center gap-2">
+                      <span className="scorefont text-sm text-stone-500">{p.stats.wins}승 {p.stats.losses}패</span>
+                      {adminOn && (
+                        <button onClick={() => correctPlayerStats(p)} className="text-[11px] text-stone-400 underline underline-offset-2">
+                          수정
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               {players.length === 0 && (
