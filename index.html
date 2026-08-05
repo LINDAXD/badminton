@@ -92,6 +92,15 @@ function App() {
   const [payments, setPayments] = React.useState({});
   const [pending, setPending] = React.useState([]);
   const [checkinlog, setCheckinlog] = React.useState([]);
+  const [dailyvotesDoc, setDailyvotesDoc] = React.useState({});
+
+  React.useEffect(() => {
+    const unsub = REFS.dailyvotes.onSnapshot((snap) => {
+      const data = snap.data();
+      setDailyvotesDoc(data && data.data ? data.data : {});
+    }, () => {});
+    return () => unsub();
+  }, []);
 
   React.useEffect(() => {
     const unsub = REFS.pending.onSnapshot((snap) => {
@@ -315,6 +324,31 @@ function App() {
               🎉 <span>{newMembersToday.map((m) => m.name).join(", ")}</span>님, 버디에 오신 걸 환영해요!
             </p>
           </div>
+        </section>
+      )}
+
+      {/* 오늘의 친절왕 */}
+      {(() => {
+        const kindWinnerId = dailyWinner(dailyvotesDoc, todayStr(), "kind");
+        const kindWinner = kindWinnerId && roster.find((m) => m.id === kindWinnerId);
+        if (!kindWinner) return null;
+        return (
+          <section className="px-5 pt-3 max-w-2xl mx-auto">
+            <div className="rise-in rounded-2xl p-3.5 text-center" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
+              <p className="text-sm font-bold" style={{ color: "#B98900" }}>
+                😊 오늘의 친절왕은 <span>{kindWinner.name}</span>님이에요!
+              </p>
+            </div>
+          </section>
+        );
+      })()}
+
+      {myId && rsvp[myId] === "in" && (
+        <section className="px-5 pt-3 max-w-2xl mx-auto">
+          <a href="./vote.html" className="rise-in flex items-center justify-between bg-white rounded-2xl p-3.5 border border-stone-100 shadow-sm tap-scale">
+            <span className="text-sm font-semibold text-stone-700">🗳️ 오늘 함께한 사람에게 투표하기</span>
+            <span className="text-stone-300">&gt;</span>
+          </a>
         </section>
       )}
 

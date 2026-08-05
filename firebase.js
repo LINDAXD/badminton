@@ -42,6 +42,7 @@ window.REFS = {
   courtmatches: db.collection("badminton").doc("courtmatches"), // 코트별 진행중인 경기 (실시간 공유)
   matchmode: db.collection("badminton").doc("matchmode"),     // 매칭 모드(랜덤/균형/실력전) + 제외 회원
   kindvotes: db.collection("badminton").doc("kindvotes"),     // "또 치고싶어요" 익명 투표 (친절왕 집계용)
+  dailyvotes: db.collection("badminton").doc("dailyvotes"),   // 오늘의 MVP/친절왕/분위기메이커/성장왕/베스트플레이 익명 투표
 };
 
 // ---- 공통 상수 ----

@@ -26,6 +26,15 @@ function App() {
   const [scheduleItems, setScheduleItems] = React.useState([]);
   const [kindvotes, setKindvotes] = React.useState([]);
   const [matchhistory, setMatchhistory] = React.useState([]);
+  const [dailyvotes, setDailyvotes] = React.useState({});
+
+  React.useEffect(() => {
+    const unsub = REFS.dailyvotes.onSnapshot((snap) => {
+      const data = snap.data();
+      setDailyvotes(data && data.data ? data.data : {});
+    }, () => {});
+    return () => unsub();
+  }, []);
 
   React.useEffect(() => {
     const unsub = REFS.kindvotes.onSnapshot((snap) => {
@@ -333,6 +342,7 @@ function App() {
           scheduleItems={scheduleItems}
           kindvotes={kindvotes}
           matchhistory={matchhistory}
+          dailyvotes={dailyvotes}
           canEdit={adminOn || profileMember.id === myId}
           isAdmin={adminOn}
           onSave={saveProfileFields}
