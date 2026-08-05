@@ -122,8 +122,8 @@ function App() {
   const backupInputRef = useRef(null);
   const [numCourts, setNumCourts] = useState(2);
   const [hist, setHist] = useState(buildHistory());
-  const [round, setRound] = useState(null);
-  const [roundNum, setRoundNum] = useState(0);
+  const [courtMatches, setCourtMatches] = useState({}); // { [courtNumber]: match | null }
+  const [matchSeq, setMatchSeq] = useState(0);
   const [history, setHistory] = useState([]);
   const [syncMsg, setSyncMsg] = useState("");
   const [rsvp, setRsvp] = useState({});
@@ -402,77 +402,89 @@ function App() {
 
   const [justShuffled, setJustShuffled] = useState(false);
 
-  function handleGenerate() {
+  // 현재 활성 매칭에 배정된(=아직 안 끝난) 선수 id 집합
+  const occupiedIds = new Set();
+  Object.values(courtMatches).forEach((m) => {
+    if (m && !m.done) [...m.teamA, ...m.teamB].forEach((p) => occupiedIds.add(p.id));
+  });
+
+  // 대기 중(체크인 했지만 지금 안 뛰고 있는) 선수들 — 게임 적게 한 사람 우선, 쉬고 싶어요 누른 사람 제외
+  const waitingPlayers = players
+    .filter((p) => !occupiedIds.has(p.id) && !restWish[p.id])
+    .sort((a, b) => a.gamesPlayed - b.gamesPlayed || Math.random() - 0.5);
+
+  function startMatchOnCourt(courtNum) {
     if (!adminOn) {
       tryAdminUnlock();
       return;
     }
-    const courts = Math.min(numCourts, maxCourts);
-    const restIds = new Set(Object.keys(restWish));
-    const { matches, resting } = generateRound(players, courts, hist, restIds, skillOf);
-    setRound({ matches, resting });
-    setRoundNum((n) => n + 1);
+    if (waitingPlayers.length < 4) {
+      window.alert("대기 중인 인원이 4명 미만이에요. 체크인/참석자를 확인해주세요.");
+      return;
+    }
+    const four = waitingPlayers.slice(0, 4);
+    const { a, b } = splitScore(four, hist, skillOf);
+    const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
+    setCourtMatches((prev) => ({ ...prev, [courtNum]: match }));
+    setMatchSeq((n) => n + 1);
     setTab("match");
-    clearRestWish();
     setJustShuffled(true);
     setTimeout(() => setJustShuffled(false), 500);
   }
 
-  function updateScore(matchId, side, value) {
+  function updateScore(courtNum, side, value) {
     if (!/^\d{0,2}$/.test(value)) return;
-    setRound((r) => ({
-      ...r,
-      matches: r.matches.map((m) => (m.id === matchId ? { ...m, [side]: value } : m)),
-    }));
-  }
-
-  function finishMatch(matchId) {
-    setRound((r) => {
-      const m = r.matches.find((x) => x.id === matchId);
-      if (!m || m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB) return r;
-      const aWin = Number(m.scoreA) > Number(m.scoreB);
-
-      setPlayers((ps) =>
-        ps.map((p) => {
-          const inA = m.teamA.some((x) => x.id === p.id);
-          const inB = m.teamB.some((x) => x.id === p.id);
-          if (!inA && !inB) return p;
-          const won = (inA && aWin) || (inB && !aWin);
-          return {
-            ...p,
-            gamesPlayed: p.gamesPlayed + 1,
-            wins: p.wins + (won ? 1 : 0),
-            losses: p.losses + (won ? 0 : 1),
-          };
-        })
-      );
-
-      setHist((h) => {
-        const nh = { partner: { ...h.partner }, opponent: { ...h.opponent } };
-        bump(nh.partner, pKey(m.teamA[0].id, m.teamA[1].id));
-        bump(nh.partner, pKey(m.teamB[0].id, m.teamB[1].id));
-        m.teamA.forEach((a) => m.teamB.forEach((b) => bump(nh.opponent, pKey(a.id, b.id))));
-        return nh;
-      });
-
-      const finished = { ...m, done: true };
-      setHistory((hArr) => [{ ...finished, round: roundNum }, ...hArr]);
-      logMatchResult({
-        round: roundNum,
-        court: m.court,
-        teamA: m.teamA.map((p) => ({ id: p.id, name: p.name })),
-        teamB: m.teamB.map((p) => ({ id: p.id, name: p.name })),
-        scoreA: m.scoreA,
-        scoreB: m.scoreB,
-      });
-
-      return { ...r, matches: r.matches.map((x) => (x.id === matchId ? finished : x)) };
+    setCourtMatches((prev) => {
+      const m = prev[courtNum];
+      if (!m) return prev;
+      return { ...prev, [courtNum]: { ...m, [side]: value } };
     });
   }
 
-  const allDone = round && round.matches.every((m) => m.done);
+  function finishMatch(courtNum) {
+    const m = courtMatches[courtNum];
+    if (!m || m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB) return;
+    const aWin = Number(m.scoreA) > Number(m.scoreB);
+
+    setPlayers((ps) =>
+      ps.map((p) => {
+        const inA = m.teamA.some((x) => x.id === p.id);
+        const inB = m.teamB.some((x) => x.id === p.id);
+        if (!inA && !inB) return p;
+        const won = (inA && aWin) || (inB && !aWin);
+        return {
+          ...p,
+          gamesPlayed: p.gamesPlayed + 1,
+          wins: p.wins + (won ? 1 : 0),
+          losses: p.losses + (won ? 0 : 1),
+        };
+      })
+    );
+
+    setHist((h) => {
+      const nh = { partner: { ...h.partner }, opponent: { ...h.opponent } };
+      bump(nh.partner, pKey(m.teamA[0].id, m.teamA[1].id));
+      bump(nh.partner, pKey(m.teamB[0].id, m.teamB[1].id));
+      m.teamA.forEach((a) => m.teamB.forEach((b) => bump(nh.opponent, pKey(a.id, b.id))));
+      return nh;
+    });
+
+    const finished = { ...m, done: true };
+    setHistory((hArr) => [{ ...finished, round: matchSeq }, ...hArr]);
+    logMatchResult({
+      round: matchSeq,
+      court: m.court,
+      teamA: m.teamA.map((p) => ({ id: p.id, name: p.name })),
+      teamB: m.teamB.map((p) => ({ id: p.id, name: p.name })),
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+    });
+
+    setCourtMatches((prev) => ({ ...prev, [courtNum]: finished }));
+  }
 
   return (
+    <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-900 pb-24 font-sans">
       <TopHeader title="🎲 랜덤매칭" subtitle="오늘 코트 매칭을 만들어봐요" />
 
@@ -481,10 +493,10 @@ function App() {
           <span>참석 <b className="text-stone-800">{players.length}</b>명</span>
           <span>·</span>
           <span>코트 <b className="text-stone-800">{numCourts}</b>면</span>
-          {roundNum > 0 && (
+          {Object.values(courtMatches).some((m) => m && !m.done) && (
             <>
               <span>·</span>
-              <span><b className="text-stone-800">{roundNum}</b>라운드 진행</span>
+              <span><b className="text-stone-800">{Object.values(courtMatches).filter((m) => m && !m.done).length}</b>경기 진행중</span>
             </>
           )}
         </div>
@@ -699,12 +711,12 @@ function App() {
 
           <button
             disabled={!canGenerate}
-            onClick={handleGenerate}
+            onClick={() => setTab("match")}
             className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
               canGenerate ? "bg-[#4CAF50] text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
             } transition`}
           >
-            🔀 {roundNum > 0 ? "다음 라운드 매칭 생성" : "매칭 생성하기"} {!adminOn && "🔒"}
+            🎲 매칭 탭으로 가서 코트별로 시작하기
           </button>
           {!canGenerate && (
             <p className="text-xs text-center text-stone-400 -mt-2">최소 4명 이상 체크해야 매칭할 수 있어요.</p>
@@ -798,119 +810,119 @@ function App() {
 
       {tab === "match" && (
         <section className="px-5 mt-5 space-y-4">
-          {!round ? (
-            <div className="bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300 space-y-3">
-              <p className="text-sm text-stone-400">아직 생성된 매칭이 없어요.</p>
-              <button
-                disabled={!canGenerate}
-                onClick={handleGenerate}
-                className={`w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide ${
-                  canGenerate ? "bg-[#4CAF50] text-white active:scale-[0.98]" : "bg-stone-200 text-stone-400"
-                } transition ${justShuffled ? "shuffle-pulse" : ""}`}
-              >
-                🔀 매칭 생성하기 {!adminOn && "🔒"}
-              </button>
-              {!canGenerate && <p className="text-xs text-stone-400">참석자 탭에서 4명 이상 등록해주세요.</p>}
+          {waitingPlayers.length > 0 && (
+            <div className="bg-stone-100 rounded-2xl p-4 border border-stone-200">
+              <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">⏳ 대기 중 ({waitingPlayers.length}명)</p>
+              <p className="text-sm">{waitingPlayers.map((p) => p.name).join(", ")}</p>
             </div>
-          ) : (
-            <>
-              {round.matches.map((m) => (
-                <div key={m.id} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-                  <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
-                    <span>Court {m.court}</span>
-                    {m.done && <span className="text-[#FFD54F]">종료</span>}
-                  </div>
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-4 gap-2">
-                    <div className="text-right">
-                      <p className="text-sm font-medium leading-tight">{m.teamA[0].name}</p>
-                      <p className="text-sm font-medium leading-tight">{m.teamA[1].name}</p>
-                    </div>
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-px h-4 bg-stone-300" />
-                      <span className="text-[10px] text-stone-400">VS</span>
-                      <div className="w-px h-4 bg-stone-300" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium leading-tight">{m.teamB[0].name}</p>
-                      <p className="text-sm font-medium leading-tight">{m.teamB[1].name}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-center gap-3 pb-4">
-                    <input
-                      disabled={m.done}
-                      value={m.scoreA}
-                      onChange={(e) => updateScore(m.id, "scoreA", e.target.value)}
-                      inputMode="numeric"
-                      placeholder="0"
-                      className="scorefont w-14 h-12 text-center text-xl rounded-xl border border-stone-300 bg-stone-50 disabled:bg-stone-100 disabled:text-stone-400"
-                    />
-                    <span className="text-stone-400">:</span>
-                    <input
-                      disabled={m.done}
-                      value={m.scoreB}
-                      onChange={(e) => updateScore(m.id, "scoreB", e.target.value)}
-                      inputMode="numeric"
-                      placeholder="0"
-                      className="scorefont w-14 h-12 text-center text-xl rounded-xl border border-stone-300 bg-stone-50 disabled:bg-stone-100 disabled:text-stone-400"
-                    />
-                  </div>
-                  {!m.done && (
-                    <button
-                      onClick={() => finishMatch(m.id)}
-                      disabled={m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB}
-                      className="w-full py-2.5 text-sm font-semibold bg-[#FFD54F] text-[#5c4a00] disabled:bg-stone-200 disabled:text-stone-400"
-                    >
-                      경기 종료
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              {round.resting.length > 0 && (
-                <div className="bg-stone-100 rounded-2xl p-4 border border-stone-200">
-                  <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">쉬는 중</p>
-                  <p className="text-sm">{round.resting.map((p) => p.name).join(", ")}</p>
-                </div>
-              )}
-
-              <div className="bg-white rounded-2xl p-4 border border-stone-200">
-                <p className="text-xs font-semibold text-stone-500 mb-1">다음 라운드는 쉴래요</p>
-                <p className="text-xs text-stone-400 mb-2">본인 이름만 눌려요. 누르면 다음 매칭 생성할 때 자동으로 쉬는 사람에 들어가요. 아래 목록은 관리자를 포함해 모두에게 실시간으로 보여요.</p>
-                {Object.keys(restWish).length > 0 && (
-                  <p className="text-xs font-semibold mb-2" style={{ color: "#4CAF50" }}>
-                    ✋ 쉬고 싶어하는 사람: {players.filter((p) => restWish[p.id]).map((p) => p.name).join(", ") || "-"}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {players.map((p) => {
-                    const wantsRest = !!restWish[p.id];
-                    const isMe = p.id === myId;
-                    return (
-                      <button
-                        key={p.id}
-                        disabled={!isMe}
-                        onClick={() => toggleRestWish(p.id)}
-                        className={`px-3 py-1.5 rounded-full text-xs border transition ${
-                          wantsRest ? "bg-stone-800 text-white border-stone-800" : "bg-stone-50 text-stone-500 border-stone-200"
-                        } ${!isMe ? "opacity-40 cursor-not-allowed" : ""}`}
-                      >
-                        {p.name} {wantsRest ? "· 쉼" : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {allDone && (
-                <button
-                  onClick={handleGenerate}
-                  className="w-full rounded-2xl py-3.5 flex items-center justify-center gap-2 font-semibold headfont uppercase tracking-wide bg-[#4CAF50] text-white active:scale-[0.98] transition"
-                >
-                  🔀 다음 라운드 {!adminOn && "🔒"}
-                </button>
-              )}
-            </>
           )}
+
+          {Array.from({ length: numCourts }, (_, i) => i + 1).map((courtNum) => {
+            const m = courtMatches[courtNum];
+            return (
+              <div key={courtNum} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
+                <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
+                  <span>Court {courtNum}</span>
+                  {m && m.done && <span className="text-[#FFD54F]">종료</span>}
+                  {m && !m.done && <span className="text-[#FFD54F]">경기중</span>}
+                  {!m && <span className="text-white/60">비어있음</span>}
+                </div>
+
+                {!m ? (
+                  <div className="p-5 text-center space-y-3">
+                    <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
+                    <button
+                      onClick={() => startMatchOnCourt(courtNum)}
+                      className="w-full rounded-xl py-3 font-semibold text-sm bg-[#4CAF50] text-white active:scale-[0.98] transition"
+                    >
+                      🔀 이 코트 경기 시작 {!adminOn && "🔒"}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-4 gap-2">
+                      <div className="text-right">
+                        <p className="text-sm font-medium leading-tight">{m.teamA[0].name}</p>
+                        <p className="text-sm font-medium leading-tight">{m.teamA[1].name}</p>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-px h-4 bg-stone-300" />
+                        <span className="text-[10px] text-stone-400">VS</span>
+                        <div className="w-px h-4 bg-stone-300" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium leading-tight">{m.teamB[0].name}</p>
+                        <p className="text-sm font-medium leading-tight">{m.teamB[1].name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center gap-3 pb-4">
+                      <input
+                        disabled={m.done}
+                        value={m.scoreA}
+                        onChange={(e) => updateScore(courtNum, "scoreA", e.target.value)}
+                        inputMode="numeric"
+                        placeholder="0"
+                        className="scorefont w-14 h-12 text-center text-xl rounded-xl border border-stone-300 bg-stone-50 disabled:bg-stone-100 disabled:text-stone-400"
+                      />
+                      <span className="text-stone-400">:</span>
+                      <input
+                        disabled={m.done}
+                        value={m.scoreB}
+                        onChange={(e) => updateScore(courtNum, "scoreB", e.target.value)}
+                        inputMode="numeric"
+                        placeholder="0"
+                        className="scorefont w-14 h-12 text-center text-xl rounded-xl border border-stone-300 bg-stone-50 disabled:bg-stone-100 disabled:text-stone-400"
+                      />
+                    </div>
+                    {!m.done ? (
+                      <button
+                        onClick={() => finishMatch(courtNum)}
+                        disabled={m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB}
+                        className="w-full py-2.5 text-sm font-semibold bg-[#FFD54F] text-[#5c4a00] disabled:bg-stone-200 disabled:text-stone-400"
+                      >
+                        경기 종료
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => startMatchOnCourt(courtNum)}
+                        className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white"
+                      >
+                        🔀 이 코트 다음 경기 시작 {!adminOn && "🔒"}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+            <p className="text-xs font-semibold text-stone-500 mb-1">다음 경기는 쉴래요</p>
+            <p className="text-xs text-stone-400 mb-2">본인 이름만 눌려요. 누르면 그 코트가 다음 경기를 시작할 때 대기 명단에서 빠져요. 아래 목록은 관리자를 포함해 모두에게 실시간으로 보여요.</p>
+            {Object.keys(restWish).length > 0 && (
+              <p className="text-xs font-semibold mb-2" style={{ color: "#4CAF50" }}>
+                ✋ 쉬고 싶어하는 사람: {players.filter((p) => restWish[p.id]).map((p) => p.name).join(", ") || "-"}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {players.map((p) => {
+                const wantsRest = !!restWish[p.id];
+                const isMe = p.id === myId;
+                return (
+                  <button
+                    key={p.id}
+                    disabled={!isMe}
+                    onClick={() => toggleRestWish(p.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs border transition ${
+                      wantsRest ? "bg-stone-800 text-white border-stone-800" : "bg-stone-50 text-stone-500 border-stone-200"
+                    } ${!isMe ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {p.name} {wantsRest ? "· 쉼" : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </section>
       )}
 
@@ -973,6 +985,7 @@ function App() {
 
       <BottomNav active="match" />
     </div>
+    </RequireLogin>
   );
 }
 

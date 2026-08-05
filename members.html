@@ -13,8 +13,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -79,6 +77,7 @@ function App() {
   }));
 
   return (
+    <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
       <TopHeader title="👥 회원 관리" subtitle="버디클럽 멤버 명단을 확인하고 관리해요" />
 
@@ -195,6 +194,7 @@ function App() {
 
       <BottomNav active="members" />
     </div>
+    </RequireLogin>
   );
 }
 

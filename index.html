@@ -13,8 +13,6 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase.js"></script>
 </head>
 <body>
@@ -89,6 +87,40 @@ function App() {
   const [reviews, setReviews] = React.useState([]);
   const [reviewsReady, setReviewsReady] = React.useState(false);
   const [checkedInMsg, setCheckedInMsg] = React.useState("");
+  const [paymentInfo, setPaymentInfo] = React.useState(null);
+  const [payments, setPayments] = React.useState({});
+
+  React.useEffect(() => {
+    const unsub = REFS.paymentinfo.onSnapshot((snap) => {
+      const data = snap.data();
+      setPaymentInfo(data && data.bank ? data : null);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = REFS.payments.onSnapshot((snap) => {
+      const data = snap.data();
+      const all = data && data.data ? data.data : {};
+      setPayments(all[todayStr()] || {});
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  function togglePaid() {
+    if (!myId) return;
+    const paidNow = !payments[myId];
+    const next = { ...payments, [myId]: paidNow ? { paid: true, at: new Date().toISOString() } : undefined };
+    if (!paidNow) delete next[myId];
+    setPayments(next);
+    REFS.payments.get().then((snap) => {
+      const data = snap.data() || {};
+      const all = data.data || {};
+      all[todayStr()] = next;
+      REFS.payments.set({ data: all }).catch(() => {});
+    }).catch(() => {});
+  }
+
 
   React.useEffect(() => {
     const unsub = REFS.checkin.onSnapshot((snap) => {
@@ -251,6 +283,29 @@ function App() {
         </div>
         {checkedInMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{checkedInMsg}</p>}
       </section>
+
+      {/* venue rental fee (대관비) */}
+      {myId && paymentInfo && rsvp[myId] === "in" && (
+        <section className="px-5 max-w-2xl mx-auto mb-5">
+          <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
+            <p className="text-sm font-bold text-stone-800 mb-1">💰 오늘 대관비</p>
+            <p className="text-xs text-stone-400 mb-3">아래 계좌로 송금 후 완료 버튼을 눌러주세요.</p>
+            <div className="bg-stone-50 rounded-xl p-3 mb-3 space-y-1">
+              <p className="text-sm"><span className="text-stone-400">은행</span> · <b>{paymentInfo.bank}</b></p>
+              <p className="text-sm"><span className="text-stone-400">계좌번호</span> · <b className="scorefont">{paymentInfo.account}</b></p>
+              <p className="text-sm"><span className="text-stone-400">예금주</span> · <b>{paymentInfo.holder}</b></p>
+              <p className="text-sm"><span className="text-stone-400">금액</span> · <b style={{ color: "#4CAF50" }}>{fmtMoney(paymentInfo.amount)}</b></p>
+            </div>
+            <button
+              onClick={togglePaid}
+              className={`w-full rounded-xl py-2.5 text-sm font-semibold tap-scale ${payments[myId] ? "text-white" : "border"}`}
+              style={payments[myId] ? { backgroundColor: "#4CAF50" } : { borderColor: "#4CAF50", color: "#4CAF50" }}
+            >
+              {payments[myId] ? "✅ 송금완료" : "송금완료 눌러주세요"}
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* login card */}
       <section id="login" className="px-5 max-w-2xl mx-auto mb-5">

@@ -20,6 +20,12 @@ function fmtBirthday(b) {
   return `${b.slice(0, 2)}월 ${b.slice(2, 4)}일`;
 }
 
+function fmtMoney(n) {
+  const num = Number(n);
+  if (isNaN(num)) return "";
+  return num.toLocaleString("ko-KR") + "원";
+}
+
 function fmtDate(d) {
   if (!d) return "";
   const [y, m, day] = d.split("-");
@@ -159,6 +165,25 @@ function logMatchResult(record) {
     const items = data.items || [];
     REFS.matchhistory.set({ items: [{ id: uid(), date: todayStr(), ...record }, ...items] }).catch(() => {});
   }).catch(() => {});
+}
+
+// ---------- 로그인 필요 화면 (비로그인 접근 제한) ----------
+function RequireLogin({ myId, children }) {
+  if (myId) return children;
+  return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center text-center px-8">
+      <p className="text-4xl mb-3">🔒</p>
+      <p className="text-sm font-semibold text-stone-700 mb-1">로그인이 필요해요</p>
+      <p className="text-xs text-stone-400 mb-5">홈 화면에서 이름과 비밀번호로 입장한 뒤 이용할 수 있어요.</p>
+      <a
+        href="./index.html#login"
+        className="text-white text-sm font-semibold px-6 py-2.5 rounded-full"
+        style={{ backgroundColor: "#4CAF50" }}
+      >
+        🏠 홈으로 가서 입장하기
+      </a>
+    </div>
+  );
 }
 
 // ---------- 하단 고정 내비게이션 ----------

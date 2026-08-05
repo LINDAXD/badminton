@@ -36,6 +36,8 @@ window.REFS = {
   reviews: db.collection("badminton").doc("reviews"),       // 모임 후기
   matchhistory: db.collection("badminton").doc("matchhistory"), // 랜덤매칭 경기 기록 (내 정보용)
   statsadjust: db.collection("badminton").doc("statsadjust"), // 관리자의 개인 전적 수동 보정값
+  paymentinfo: db.collection("badminton").doc("paymentinfo"), // 대관비 계좌 정보
+  payments: db.collection("badminton").doc("payments"),       // 날짜별 대관비 송금 현황
 };
 
 // ---- 공통 상수 ----
