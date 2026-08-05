@@ -39,6 +39,9 @@ window.REFS = {
   paymentinfo: db.collection("badminton").doc("paymentinfo"), // 대관비 계좌 정보
   payments: db.collection("badminton").doc("payments"),       // 날짜별 대관비 송금 현황
   pending: db.collection("badminton").doc("pending"),         // 신규 가입 승인 대기 명단
+  courtmatches: db.collection("badminton").doc("courtmatches"), // 코트별 진행중인 경기 (실시간 공유)
+  matchmode: db.collection("badminton").doc("matchmode"),     // 매칭 모드(랜덤/균형/실력전) + 제외 회원
+  kindvotes: db.collection("badminton").doc("kindvotes"),     // "또 치고싶어요" 익명 투표 (친절왕 집계용)
 };
 
 // ---- 공통 상수 ----
@@ -48,5 +51,8 @@ window.GRADES = [
   { key: "일반회원", emoji: "🏸", color: "bg-green-100 text-green-700 border-green-200" },
   { key: "신입회원", emoji: "🌱", color: "bg-lime-100 text-lime-700 border-lime-200" },
 ];
+
+window.LEVELS = ["왕초보", "초보", "D조", "C조", "B조"];
+window.LEVEL_SKILL = { "왕초보": 0.05, "초보": 0.25, "D조": 0.5, "C조": 0.75, "B조": 0.95 };
 
 window.ADMIN_PIN = "1234";

@@ -36,6 +36,9 @@ function App() {
   const [schedDate, setSchedDate] = React.useState("");
   const [schedTime, setSchedTime] = React.useState("");
   const [schedLoc, setSchedLoc] = React.useState("");
+  const [schedCapacity, setSchedCapacity] = React.useState("");
+  const [schedDeadline, setSchedDeadline] = React.useState("");
+  const [showRanking, setShowRanking] = React.useState(false);
   const [paymentInfo, setPaymentInfo] = React.useState(null);
   const [payments, setPayments] = React.useState({});
   const [pfBank, setPfBank] = React.useState("");
@@ -122,29 +125,43 @@ function App() {
 
   function addSchedule() {
     if (!schedTitle.trim() || !schedDate) { window.alert("일정 제목과 날짜를 입력해주세요."); return; }
-    const item = { id: uid(), title: schedTitle.trim(), date: schedDate, time: schedTime, location: schedLoc.trim() };
+    const item = {
+      id: uid(), title: schedTitle.trim(), date: schedDate, time: schedTime, location: schedLoc.trim(),
+      capacity: schedCapacity ? Number(schedCapacity) : null,
+      deadline: schedDeadline || null,
+      rsvp: [],
+    };
     REFS.schedule.set({ items: [...schedule, item] }).catch(() => {});
-    setSchedTitle(""); setSchedDate(""); setSchedTime(""); setSchedLoc("");
+    setSchedTitle(""); setSchedDate(""); setSchedTime(""); setSchedLoc(""); setSchedCapacity(""); setSchedDeadline("");
   }
 
   function removeSchedule(id) {
     REFS.schedule.set({ items: schedule.filter((s) => s.id !== id) }).catch(() => {});
   }
 
-  function toggleAttend(item) {
+  function setRsvpFor(item, status) {
     if (!myId) {
       window.alert("참석 체크를 하려면 먼저 홈에서 이름으로 입장해주세요.");
       window.location.href = "./index.html#login";
       return;
     }
-    const attendees = item.attendees || [];
-    const already = attendees.some((a) => a.id === myId);
-    const nextAttendees = already
-      ? attendees.filter((a) => a.id !== myId)
-      : [...attendees, { id: myId, name: myName || "?" }];
+    const list = item.rsvp || [];
+    const existing = list.find((r) => r.id === myId);
+    const at = existing ? existing.at : Date.now();
+    const next = [...list.filter((r) => r.id !== myId), { id: myId, name: myName || "?", status, at }];
     REFS.schedule.set({
-      items: schedule.map((s) => (s.id === item.id ? { ...s, attendees: nextAttendees } : s)),
+      items: schedule.map((s) => (s.id === item.id ? { ...s, rsvp: next } : s)),
     }).catch(() => {});
+  }
+
+  function fmtCountdown(deadline) {
+    if (!deadline) return null;
+    const diff = new Date(deadline).getTime() - Date.now();
+    if (diff <= 0) return "마감됨";
+    const hours = Math.floor(diff / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    if (hours >= 24) return `마감까지 ${Math.floor(hours / 24)}일 남음`;
+    return `마감까지 ${hours}시간 ${mins}분 남음`;
   }
 
   return (
@@ -152,11 +169,18 @@ function App() {
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
       <TopHeader title="☰ 더보기" subtitle="버디의 다양한 기능들이에요" />
 
-      <section className="px-5 max-w-2xl mx-auto mb-4">
+      <section className="px-5 max-w-2xl mx-auto mb-4 space-y-2">
         <a href="./myinfo.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-stone-800">🙋 내 정보</p>
             <p className="text-[11px] text-stone-400 mt-0.5">내가 올린 후기 · 경기 기록 · 참석한 일정 모아보기</p>
+          </div>
+          <span className="text-stone-300">&gt;</span>
+        </a>
+        <a href="./stats.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-stone-800">📊 통계</p>
+            <p className="text-[11px] text-stone-400 mt-0.5">요일별 참석, 이번 달 순위, 명예의 전당</p>
           </div>
           <span className="text-stone-300">&gt;</span>
         </a>
@@ -184,6 +208,38 @@ function App() {
         </section>
       )}
 
+      {/* 출석 랭킹 */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <button onClick={() => setShowRanking((v) => !v)} className="flex items-center justify-between w-full mb-2">
+          <p className="text-sm font-bold text-stone-700">🏅 출석 랭킹</p>
+          <span className="text-xs text-stone-400">{showRanking ? "접기 ▲" : "전체 보기 ▼"}</span>
+        </button>
+        {showRanking && (
+          Object.keys(attendanceCounts).length === 0 ? (
+            <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">아직 출석 기록이 없어요.</p>
+          ) : (
+            <ul className="space-y-2">
+              {Object.keys(attendanceCounts)
+                .sort((a, b) => attendanceCounts[b] - attendanceCounts[a])
+                .slice(0, 10)
+                .map((id, i) => {
+                  const m = roster.find((x) => x.id === id);
+                  if (!m) return null;
+                  return (
+                    <li key={id} className="bg-white rounded-xl px-4 py-2.5 border border-stone-200 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="scorefont text-sm text-stone-400 w-4">{i + 1}</span>
+                        <span className="text-sm font-medium text-stone-800">{m.name}</span>
+                      </div>
+                      <span className="text-xs text-stone-500 scorefont">{attendanceCounts[id]}회</span>
+                    </li>
+                  );
+                })}
+            </ul>
+          )
+        )}
+      </section>
+
       {/* schedule */}
       <section className="px-5 max-w-2xl mx-auto mb-6">
         <p className="text-sm font-bold text-stone-700 mb-2">🗓️ 일정</p>
@@ -192,8 +248,15 @@ function App() {
         ) : (
           <ul className="space-y-2 mb-2">
             {[...schedule].sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).map((s) => {
-              const attendees = s.attendees || [];
-              const iAmIn = myId && attendees.some((a) => a.id === myId);
+              const rsvpList = s.rsvp || [];
+              const myStatus = myId ? (rsvpList.find((r) => r.id === myId) || {}).status : null;
+              const inList = rsvpList.filter((r) => r.status === "in").sort((a, b) => a.at - b.at);
+              const maybeList = rsvpList.filter((r) => r.status === "maybe");
+              const capacity = s.capacity;
+              const confirmed = capacity ? inList.slice(0, capacity) : inList;
+              const waitlist = capacity ? inList.slice(capacity) : [];
+              const countdown = fmtCountdown(s.deadline);
+              const isFull = capacity && confirmed.length >= capacity;
               return (
                 <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200">
                   <div className="flex items-center justify-between gap-2">
@@ -203,22 +266,55 @@ function App() {
                         {fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}{s.location ? ` · ${s.location}` : ""}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => toggleAttend(s)}
-                        className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border tap-scale ${
-                          iAmIn ? "text-white border-transparent" : "text-stone-400 border-stone-200"
-                        }`}
-                        style={iAmIn ? { backgroundColor: "#4CAF50" } : {}}
-                      >
-                        {iAmIn ? "✅ 참석중" : "참석하기"}
-                      </button>
-                      {adminOn && <button onClick={() => removeSchedule(s.id)} className="text-red-400 text-xs">삭제</button>}
-                    </div>
+                    {adminOn && <button onClick={() => removeSchedule(s.id)} className="text-red-400 text-xs shrink-0">삭제</button>}
                   </div>
-                  <p className="text-[11px] text-stone-400 mt-2">
-                    👥 참석 {attendees.length}명{attendees.length > 0 && `: ${attendees.map((a) => a.name).join(", ")}`}
-                  </p>
+
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className="text-[11px] text-stone-500">
+                      👥 {confirmed.length}{capacity ? ` / ${capacity}명` : "명"}
+                      {isFull && <span className="ml-1 font-semibold" style={{ color: "#B98900" }}>정원 마감</span>}
+                    </span>
+                    {waitlist.length > 0 && <span className="text-[11px] text-stone-400">· 대기 {waitlist.length}명</span>}
+                    {countdown && (
+                      <span className="text-[11px] font-semibold" style={{ color: countdown === "마감됨" ? "#dc2626" : "#4CAF50" }}>
+                        ⏰ {countdown}
+                      </span>
+                    )}
+                  </div>
+
+                  {confirmed.length > 0 && (
+                    <p className="text-[11px] text-stone-400 mt-1">참석: {confirmed.map((a) => a.name).join(", ")}</p>
+                  )}
+                  {waitlist.length > 0 && (
+                    <p className="text-[11px] text-stone-400 mt-0.5">대기자: {waitlist.map((a) => a.name).join(", ")}</p>
+                  )}
+                  {maybeList.length > 0 && (
+                    <p className="text-[11px] text-stone-400 mt-0.5">미정: {maybeList.map((a) => a.name).join(", ")}</p>
+                  )}
+
+                  <div className="flex gap-1.5 mt-2.5">
+                    <button
+                      onClick={() => setRsvpFor(s, "in")}
+                      className={`flex-1 text-xs font-semibold py-1.5 rounded-lg border tap-scale ${myStatus === "in" ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
+                      style={myStatus === "in" ? { backgroundColor: "#4CAF50" } : {}}
+                    >
+                      ✅ 참석
+                    </button>
+                    <button
+                      onClick={() => setRsvpFor(s, "maybe")}
+                      className={`flex-1 text-xs font-semibold py-1.5 rounded-lg border tap-scale ${myStatus === "maybe" ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
+                      style={myStatus === "maybe" ? { backgroundColor: "#FFD54F", color: "#5c4a00" } : {}}
+                    >
+                      ❓ 미정
+                    </button>
+                    <button
+                      onClick={() => setRsvpFor(s, "out")}
+                      className={`flex-1 text-xs font-semibold py-1.5 rounded-lg border tap-scale ${myStatus === "out" ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
+                      style={myStatus === "out" ? { backgroundColor: "#dc2626" } : {}}
+                    >
+                      ❌ 불참
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -232,6 +328,11 @@ function App() {
               <input type="time" value={schedTime} onChange={(e) => setSchedTime(e.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
             </div>
             <input value={schedLoc} onChange={(e) => setSchedLoc(e.target.value)} placeholder="장소(선택)" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            <div className="flex gap-2">
+              <input value={schedCapacity} onChange={(e) => setSchedCapacity(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="정원(선택, 숫자)" className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+              <input type="datetime-local" value={schedDeadline} onChange={(e) => setSchedDeadline(e.target.value)} className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+            </div>
+            <p className="text-[11px] text-stone-400">정원을 채우면 그 다음 신청자는 자동으로 대기자로 표시돼요.</p>
             <button onClick={addSchedule} className="w-full text-white rounded-lg py-2 text-sm font-semibold" style={{ backgroundColor: "#4CAF50" }}>일정 추가</button>
           </div>
         )}

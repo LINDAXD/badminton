@@ -79,6 +79,7 @@ function App() {
   const { myId, myName, login, logout } = useIdentity();
   const { roster } = useRoster();
   const [loginInput, setLoginInput] = React.useState("");
+  const [signupLevel, setSignupLevel] = React.useState("초보");
   const [loginMsg, setLoginMsg] = React.useState("");
   const [rsvp, setRsvp] = React.useState({});
   const [notices, setNotices] = React.useState([]);
@@ -90,11 +91,20 @@ function App() {
   const [paymentInfo, setPaymentInfo] = React.useState(null);
   const [payments, setPayments] = React.useState({});
   const [pending, setPending] = React.useState([]);
+  const [checkinlog, setCheckinlog] = React.useState([]);
 
   React.useEffect(() => {
     const unsub = REFS.pending.onSnapshot((snap) => {
       const data = snap.data();
       setPending(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = REFS.checkinlog.onSnapshot((snap) => {
+      const data = snap.data();
+      setCheckinlog(data && data.items ? data.items : []);
     }, () => {});
     return () => unsub();
   }, []);
@@ -197,7 +207,7 @@ function App() {
       const pin = window.prompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
       if (pin === null) return;
       if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
-      const req = { id: uid(), name, pin, requestedAt: todayStr() };
+      const req = { id: uid(), name, pin, level: signupLevel, requestedAt: todayStr() };
       REFS.pending.set({ items: [...pending, req] }).catch(() => {});
       setLoginMsg("가입 신청됐어요! 관리자 승인 후 이 이름과 비밀번호로 로그인할 수 있어요. 🙏");
     }
@@ -208,6 +218,11 @@ function App() {
 
   function updateMyBirthday(birthday) {
     const next = roster.map((m) => (m.id === myId ? { ...m, birthday } : m));
+    REFS.roster.set({ members: next }).catch(() => {});
+  }
+
+  function updateMyLevel(level) {
+    const next = roster.map((m) => (m.id === myId ? { ...m, level } : m));
     REFS.roster.set({ members: next }).catch(() => {});
   }
 
@@ -241,7 +256,21 @@ function App() {
     setTimeout(() => setCheckedInMsg(""), 2500);
   }
 
+  function cancelCheckIn() {
+    if (!myId) return;
+    const next = { ...rsvp, [myId]: "out" };
+    setRsvp(next);
+    REFS.checkin.set({ data: next }).catch(() => {});
+    setCheckedInMsg("참석이 취소됐어요.");
+    setTimeout(() => setCheckedInMsg(""), 2500);
+  }
+
   const attendCount = Object.values(rsvp).filter((v) => v === "in").length;
+  const attendingMembers = roster.filter((m) => rsvp[m.id] === "in");
+  const latestPhoto = reviews.find((r) => photosOf(r).length >= 3);
+  function isFirstTimer(id) {
+    return checkinlog.filter((c) => c.memberId === id).length <= 1;
+  }
   const pinned = notices.find((n) => n.pinned);
   const preview = pinned || notices[0];
   const upcomingList = [...schedule]
@@ -249,6 +278,7 @@ function App() {
     .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))
     .slice(0, 3);
   const birthdayMembers = roster.filter((m) => m.birthday && m.birthday === todayMD());
+  const newMembersToday = roster.filter((m) => m.joinedAt === todayStr());
 
   return (
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
@@ -277,20 +307,51 @@ function App() {
         </section>
       )}
 
+      {/* 신규 회원 환영 배너 */}
+      {newMembersToday.length > 0 && (
+        <section className="px-5 pt-3 max-w-2xl mx-auto">
+          <div className="rise-in rounded-2xl p-3.5 text-center" style={{ backgroundColor: "#F0FBF1", border: "1px solid #4CAF50" }}>
+            <p className="text-sm font-bold" style={{ color: "#2e7d32" }}>
+              🎉 <span>{newMembersToday.map((m) => m.name).join(", ")}</span>님, 버디에 오신 걸 환영해요!
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* hero */}
       <section className="px-5 pt-4 pb-6 max-w-2xl mx-auto text-center">
-        <div className="text-6xl mb-3 floaty">🏸</div>
-        <h1 className="headfont text-3xl leading-snug text-stone-900">
-          혼자보다 함께,<br />
-          <span style={{ color: "#4CAF50" }}>버디</span>
-        </h1>
+        {latestPhoto ? (
+          <div className="relative rounded-3xl overflow-hidden mb-4 rise-in" style={{ height: "180px" }}>
+            <img src={photosOf(latestPhoto)[0]} alt="최근 모임 사진" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-4 text-left">
+              <h1 className="headfont text-2xl text-white leading-snug">
+                혼자보다 함께, <span style={{ color: "#FFD54F" }}>버디</span>
+              </h1>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="text-6xl mb-3 floaty">🏸</div>
+            <h1 className="headfont text-3xl leading-snug text-stone-900">
+              혼자보다 함께,<br />
+              <span style={{ color: "#4CAF50" }}>버디</span>
+            </h1>
+          </>
+        )}
         <p className="text-stone-400 mt-2 text-sm">오늘도 같이 뛰어요, 우리 버디</p>
 
         <div className="flex gap-2 justify-center mt-6">
-          <button onClick={checkInNow} className="tap-scale text-white text-sm font-bold px-6 py-3 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
-            ✋ 참석하기
-          </button>
-          <a href="./match.html" className="tap-scale text-sm font-bold px-6 py-3 rounded-full border" style={{ borderColor: "#FFD54F", color: "#B98900", backgroundColor: "#FFFBEA" }}>
+          {rsvp[myId] === "in" ? (
+            <button onClick={cancelCheckIn} className="tap-scale text-sm font-bold px-7 py-4 rounded-full shadow-sm border-2" style={{ borderColor: "#4CAF50", color: "#4CAF50", backgroundColor: "white" }}>
+              ✅ 참석취소
+            </button>
+          ) : (
+            <button onClick={checkInNow} className="tap-scale text-white text-base font-bold px-8 py-4 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
+              ✋ 참석하기
+            </button>
+          )}
+          <a href="./match.html" className="tap-scale text-sm font-bold px-6 py-4 rounded-full border" style={{ borderColor: "#FFD54F", color: "#B98900", backgroundColor: "#FFFBEA" }}>
             🎲 랜덤매칭
           </a>
         </div>
@@ -331,6 +392,18 @@ function App() {
               </div>
               <div className="mt-3 pt-3 border-t border-stone-100 space-y-2">
                 <MyBirthdayField me={me} onSave={updateMyBirthday} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-stone-400 shrink-0">🏸 내 레벨</span>
+                  <select
+                    value={(me && me.level) || "초보"}
+                    onChange={(e) => updateMyLevel(e.target.value)}
+                    className="text-xs border border-stone-200 rounded-lg px-2 py-1.5"
+                  >
+                    {window.LEVELS.map((lv) => (
+                      <option key={lv} value={lv}>{lv}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex items-center gap-3">
                   <button onClick={changeMyPin} className="text-[11px] text-stone-400 underline underline-offset-2">
                     🔑 비밀번호 변경
@@ -344,7 +417,7 @@ function App() {
           ) : (
             <>
               <p className="text-sm font-semibold text-stone-800 mb-1">이름으로 입장하기</p>
-              <p className="text-xs text-stone-400 mb-3">기존 멤버는 이름 그대로, 처음이면 자동으로 등록돼요.</p>
+              <p className="text-xs text-stone-400 mb-3">기존 멤버는 이름 그대로, 처음이면 가입 신청 후 관리자 승인을 받아요.</p>
               <div className="flex gap-2">
                 <input
                   value={loginInput}
@@ -355,6 +428,18 @@ function App() {
                   style={{ "--tw-ring-color": "#4CAF50" }}
                 />
                 <button onClick={doLogin} className="text-white rounded-xl px-4 text-sm font-semibold tap-scale" style={{ backgroundColor: "#4CAF50" }}>입장</button>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[11px] text-stone-400 shrink-0">처음이면 내 실력</span>
+                <select
+                  value={signupLevel}
+                  onChange={(e) => setSignupLevel(e.target.value)}
+                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5"
+                >
+                  {window.LEVELS.map((lv) => (
+                    <option key={lv} value={lv}>{lv}</option>
+                  ))}
+                </select>
               </div>
               {loginMsg && <p className="text-xs mt-1.5" style={{ color: "#4CAF50" }}>{loginMsg}</p>}
               <p className="text-[10px] text-stone-300 mt-2">🔒 다른 사람의 이름으로는 비밀번호 없이 입장할 수 없어요.</p>
@@ -370,26 +455,54 @@ function App() {
           {upcomingList.length === 0 ? (
             <p className="text-sm text-stone-400">예정된 일정이 없어요.</p>
           ) : (
-            <ul className="space-y-2">
-              {upcomingList.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-stone-800 truncate">{s.title}</p>
-                  <p className="text-[11px] text-stone-400 shrink-0">
-                    {fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="mb-3 pb-3 border-b border-stone-100">
+                <p className="headfont text-2xl text-stone-900">
+                  {fmtDate(upcomingList[0].date)}
+                  {upcomingList[0].time && <span className="ml-2 text-lg" style={{ color: "#4CAF50" }}>{fmtTime(upcomingList[0].time)}</span>}
+                </p>
+                <p className="text-sm text-stone-600 mt-0.5">{upcomingList[0].title}{upcomingList[0].location ? ` · ${upcomingList[0].location}` : ""}</p>
+              </div>
+              {upcomingList.length > 1 && (
+                <ul className="space-y-2">
+                  {upcomingList.slice(1).map((s) => (
+                    <li key={s.id} className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-stone-600 truncate">{s.title}</p>
+                      <p className="text-[11px] text-stone-400 shrink-0">
+                        {fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       </section>
 
       {/* quick cards */}
-      <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
+      <section className="px-5 max-w-2xl mx-auto mb-4">
         <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          <p className="text-[11px] text-stone-400 mb-1">오늘 참석 인원</p>
-          <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{attendCount}<span className="text-sm text-stone-400 font-normal">명</span></p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] text-stone-400">오늘 참석 인원</p>
+            <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{attendCount}<span className="text-xs text-stone-400 font-normal">명</span></p>
+          </div>
+          {attendingMembers.length === 0 ? (
+            <p className="text-xs text-stone-400">아직 참석한 사람이 없어요.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {attendingMembers.map((m) => (
+                <span key={m.id} className="text-xs bg-stone-50 border border-stone-200 rounded-full px-2.5 py-1 text-stone-600">
+                  {isFirstTimer(m.id) && <span className="mr-0.5">🌱</span>}
+                  {m.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
+      </section>
+
+      <section className="px-5 max-w-2xl mx-auto mb-4">
         <a href="./reviews.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale overflow-hidden">
           <p className="text-[11px] text-stone-400 mb-1">📸 최근 후기</p>
           {!reviewsReady ? (
