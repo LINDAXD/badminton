@@ -12,25 +12,17 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 window.db = firebase.firestore();
-window.storage = firebase.storage();
 
-// ---- 익명 인증 ----
-// Firebase Storage 기본 보안 규칙은 로그인(인증)된 사용자만 업로드를 허용해요.
-// 회원가입/로그인 화면이 따로 없으므로, 사진 업로드가 필요한 페이지에서
-// 실제 업로드 전에 `await window.authReady`로 이 익명 인증이 끝나길 기다려야 해요.
-window.authReady = new Promise((resolve) => {
-  firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-      resolve(user);
-    } else {
-      firebase.auth().signInAnonymously().catch((err) => {
-        console.error("Firebase 익명 인증 실패:", err);
-        resolve(null);
-      });
-    }
-  });
-});
-
+// ---- Cloudinary 설정 (사진 업로드용) ----
+// Firebase Storage는 이제 카드 등록(Blaze)이 필요해서, 대신 무료인 Cloudinary를 씁니다.
+// 아래 두 값을 Cloudinary 가입 후 본인 값으로 꼭 채워주세요:
+// 1) cloudName: Cloudinary 대시보드 상단에 보이는 "Cloud name"
+// 2) uploadPreset: Settings → Upload → Upload presets → Add upload preset
+//    → Signing Mode를 "Unsigned"로 설정하고 저장한 뒤, 그 preset 이름
+window.CLOUDINARY = {
+  cloudName: "qu68x157",
+  uploadPreset: "krlvpgfp",
+};
 
 // ---- 공통 Firestore 문서 참조 (컬렉션 "badminton" 유지) ----
 window.REFS = {
