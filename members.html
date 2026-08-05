@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>회원 관리 | Birdie Club</title>
+<title>회원 관리 | Birdie</title>
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./style.css" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -27,6 +27,30 @@ function App() {
   const [search, setSearch] = React.useState("");
   const [bulkText, setBulkText] = React.useState("");
   const [addMsg, setAddMsg] = React.useState("");
+  const [pending, setPending] = React.useState([]);
+
+  React.useEffect(() => {
+    const unsub = REFS.pending.onSnapshot((snap) => {
+      const data = snap.data();
+      setPending(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  function approveRequest(req) {
+    const member = { id: uid(), name: req.name, grade: "신입회원", joinedAt: todayStr(), birthday: "", pin: req.pin };
+    persist([...roster, member]);
+    const next = pending.filter((p) => p.id !== req.id);
+    setPending(next);
+    REFS.pending.set({ items: next }).catch(() => {});
+  }
+
+  function rejectRequest(req) {
+    if (!window.confirm(`"${req.name}" 가입 신청을 거절할까요?`)) return;
+    const next = pending.filter((p) => p.id !== req.id);
+    setPending(next);
+    REFS.pending.set({ items: next }).catch(() => {});
+  }
 
   function addMembers() {
     const names = bulkText
@@ -79,7 +103,7 @@ function App() {
   return (
     <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-      <TopHeader title="👥 회원 관리" subtitle="버디클럽 멤버 명단을 확인하고 관리해요" />
+      <TopHeader title="👥 회원 관리" subtitle="버디 멤버 명단을 확인하고 관리해요" />
 
       <section className="px-5 max-w-2xl mx-auto mb-4">
         <div className="flex items-center gap-2">
@@ -98,6 +122,33 @@ function App() {
           </button>
         </div>
       </section>
+
+      {adminOn && pending.length > 0 && (
+        <section className="px-5 max-w-2xl mx-auto mb-5">
+          <div className="bg-white rounded-2xl p-4 border-2" style={{ borderColor: "#FFD54F" }}>
+            <p className="text-sm font-bold text-stone-800 mb-1">🙋 가입 승인 대기 ({pending.length}명)</p>
+            <p className="text-xs text-stone-400 mb-3">새로 이름을 입력한 사람들이에요. 승인해야 그 이름+비밀번호로 로그인할 수 있어요.</p>
+            <ul className="space-y-2">
+              {pending.map((req) => (
+                <li key={req.id} className="flex items-center justify-between border border-stone-200 rounded-xl px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-semibold text-stone-800">{req.name}</p>
+                    <p className="text-[11px] text-stone-400">{req.requestedAt} 신청</p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => approveRequest(req)} className="text-[11px] font-semibold text-white px-3 py-1.5 rounded-full" style={{ backgroundColor: "#4CAF50" }}>
+                      승인
+                    </button>
+                    <button onClick={() => rejectRequest(req)} className="text-[11px] font-semibold text-stone-400 bg-stone-100 px-3 py-1.5 rounded-full">
+                      거절
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* member groups */}
       <section className="px-5 max-w-2xl mx-auto mb-6 space-y-6">

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>Birdie Club | 혼자보다 함께, 버디클럽</title>
+<title>Birdie | 혼자보다 함께, 버디</title>
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./style.css" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -25,7 +25,7 @@ const QUOTES = [
   "혼자 치는 스매시보다, 함께 웃는 랠리가 더 오래 남아요.",
   "잘 치는 것보다 즐겁게 치는 게 먼저예요.",
   "오늘 흘린 땀이 다음 랠리를 더 즐겁게 만들어줘요.",
-  "같이 뛰는 사람이 있다는 것, 그게 버디클럽이에요.",
+  "같이 뛰는 사람이 있다는 것, 그게 버디이에요.",
 ];
 function quoteOfToday() {
   const day = new Date().getDate();
@@ -89,6 +89,15 @@ function App() {
   const [checkedInMsg, setCheckedInMsg] = React.useState("");
   const [paymentInfo, setPaymentInfo] = React.useState(null);
   const [payments, setPayments] = React.useState({});
+  const [pending, setPending] = React.useState([]);
+
+  React.useEffect(() => {
+    const unsub = REFS.pending.onSnapshot((snap) => {
+      const data = snap.data();
+      setPending(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
 
   React.useEffect(() => {
     const unsub = REFS.paymentinfo.onSnapshot((snap) => {
@@ -170,23 +179,27 @@ function App() {
         }
         login(existing.id, existing.name);
       } else {
-        const pin = window.prompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호(숫자 4자리)를 설정해주세요.`);
+        const pin = window.prompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
         if (pin === null) return;
-        if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로 설정해주세요."); return; }
+        if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
         const next = roster.map((m) => (m.id === existing.id ? { ...m, pin } : m));
         REFS.roster.set({ members: next }).catch(() => {});
         login(existing.id, existing.name);
         setLoginMsg("비밀번호가 설정됐어요. 다음부턴 이 비밀번호로 입장해주세요.");
       }
     } else {
-      const pin = window.prompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호(숫자 4자리)를 설정해주세요.`);
+      const alreadyPending = pending.some((p) => p.name === name);
+      if (alreadyPending) {
+        setLoginMsg("이미 관리자 승인을 기다리고 있는 이름이에요. 승인되면 로그인할 수 있어요.");
+        setLoginInput("");
+        return;
+      }
+      const pin = window.prompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
       if (pin === null) return;
-      if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로 설정해주세요."); return; }
-      const member = { id: uid(), name, grade: "신입회원", joinedAt: todayStr(), birthday: "", pin };
-      const next = [...roster, member];
-      REFS.roster.set({ members: next }).catch(() => {});
-      login(member.id, member.name);
-      setLoginMsg("새 멤버로 등록됐어요, 환영해요! 🌱 비밀번호를 잘 기억해주세요.");
+      if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
+      const req = { id: uid(), name, pin, requestedAt: todayStr() };
+      REFS.pending.set({ items: [...pending, req] }).catch(() => {});
+      setLoginMsg("가입 신청됐어요! 관리자 승인 후 이 이름과 비밀번호로 로그인할 수 있어요. 🙏");
     }
     setLoginInput("");
   }
@@ -206,9 +219,9 @@ function App() {
       window.alert("현재 비밀번호가 일치하지 않아요.");
       return;
     }
-    const next1 = window.prompt("새 비밀번호(숫자 4자리)를 입력해주세요.");
+    const next1 = window.prompt("새 비밀번호를 입력해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)");
     if (next1 === null) return;
-    if (!/^\d{4}$/.test(next1)) { window.alert("숫자 4자리로 입력해주세요."); return; }
+    if (!/^\d{4}$/.test(next1)) { window.alert("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
     const next = roster.map((m) => (m.id === myId ? { ...m, pin: next1 } : m));
     REFS.roster.set({ members: next }).catch(() => {});
     window.alert("비밀번호가 변경됐어요.");
@@ -241,7 +254,7 @@ function App() {
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
       {/* top */}
       <header className="px-5 pt-7 pb-2 max-w-2xl mx-auto flex items-center justify-between">
-        <span className="headfont text-lg" style={{ color: "#4CAF50" }}>🏸 Birdie Club</span>
+        <span className="headfont text-lg" style={{ color: "#4CAF50" }}>🏸 Birdie</span>
         {myId ? (
           <button onClick={logout} className="text-xs bg-stone-50 border border-stone-200 text-stone-500 rounded-full px-3 py-1.5 font-medium">
             {myName}님 · 로그아웃
@@ -269,9 +282,9 @@ function App() {
         <div className="text-6xl mb-3 floaty">🏸</div>
         <h1 className="headfont text-3xl leading-snug text-stone-900">
           혼자보다 함께,<br />
-          <span style={{ color: "#4CAF50" }}>버디클럽</span>
+          <span style={{ color: "#4CAF50" }}>버디</span>
         </h1>
-        <p className="text-stone-400 mt-2 text-sm">오늘도 같이 뛰어요, 우리 클럽 Birdie Club</p>
+        <p className="text-stone-400 mt-2 text-sm">오늘도 같이 뛰어요, 우리 버디</p>
 
         <div className="flex gap-2 justify-center mt-6">
           <button onClick={checkInNow} className="tap-scale text-white text-sm font-bold px-6 py-3 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>

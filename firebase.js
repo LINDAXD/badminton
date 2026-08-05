@@ -1,4 +1,4 @@
-// firebase.js — Birdie Club 공통 Firebase 초기화
+// firebase.js — Birdie 공통 Firebase 초기화
 // 기존 프로젝트(badminton-42968)를 그대로 사용합니다. (데이터 유지)
 const firebaseConfig = {
   apiKey: "AIzaSyDn5tgqFHAKNbiSBwxyrxyhKgFR9w1jf8E",
@@ -38,6 +38,7 @@ window.REFS = {
   statsadjust: db.collection("badminton").doc("statsadjust"), // 관리자의 개인 전적 수동 보정값
   paymentinfo: db.collection("badminton").doc("paymentinfo"), // 대관비 계좌 정보
   payments: db.collection("badminton").doc("payments"),       // 날짜별 대관비 송금 현황
+  pending: db.collection("badminton").doc("pending"),         // 신규 가입 승인 대기 명단
 };
 
 // ---- 공통 상수 ----

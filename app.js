@@ -1,4 +1,4 @@
-// app.js — Birdie Club 공통 React 컴포넌트 & 훅
+// app.js — Birdie 공통 React 컴포넌트 & 훅
 // 이 파일은 <script type="text/babel" src="./app.js"></script> 로 각 페이지에서 공유됩니다.
 const { useState, useEffect } = React;
 
@@ -212,7 +212,7 @@ function BottomNav({ active }) {
 function TopHeader({ title, subtitle }) {
   return (
     <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
-      <a href="./index.html" className="headfont text-base" style={{ color: "#4CAF50" }}>🏸 Birdie Club</a>
+      <a href="./index.html" className="headfont text-base" style={{ color: "#4CAF50" }}>🏸 Birdie</a>
       {title && <h1 className="headfont text-2xl text-stone-900 mt-2">{title}</h1>}
       {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
     </header>
