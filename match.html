@@ -36,7 +36,9 @@ function bump(map, key) {
 }
 
 // score a single 4-person court split
-function splitScore(four, hist, skillOf) {
+// ctx: { hist, skillOf, mode, todayPairCount, isFirstTimer, isKindOrStrong }
+function splitScore(four, ctx) {
+  const { hist, skillOf, mode = "balance", todayPairCount, isFirstTimer, isKindOrStrong } = ctx || {};
   const splits = [
     [[four[0], four[1]], [four[2], four[3]]],
     [[four[0], four[2]], [four[1], four[3]]],
@@ -44,6 +46,7 @@ function splitScore(four, hist, skillOf) {
   ];
   let best = null;
   for (const [a, b] of splits) {
+    // 1) 최근 파트너/상대 겹침 회피 (처음 만나는 사람 우선)
     const historyScore =
       (hist.partner[pKey(a[0].id, a[1].id)] || 0) * 3 +
       (hist.partner[pKey(b[0].id, b[1].id)] || 0) * 3 +
@@ -51,13 +54,48 @@ function splitScore(four, hist, skillOf) {
       (hist.opponent[pKey(a[0].id, b[1].id)] || 0) +
       (hist.opponent[pKey(a[1].id, b[0].id)] || 0) +
       (hist.opponent[pKey(a[1].id, b[1].id)] || 0);
-    // 실력 밸런스: 두 팀의 평균 승률 차이가 클수록 페널티 (잘하는 사람끼리 몰리는 것 방지)
-    const skillGap = skillOf
-      ? Math.abs(
-          (skillOf(a[0].id) + skillOf(a[1].id)) / 2 - (skillOf(b[0].id) + skillOf(b[1].id)) / 2
-        ) * 8
-      : 0;
-    const s = historyScore + skillGap;
+
+    // 2) 오늘 같이 친 횟수 제한 — 2번까지는 약한 페널티, 3번째부터는 강하게 페널티
+    let todayPenalty = 0;
+    if (todayPairCount) {
+      const pairs = [
+        [a[0].id, a[1].id], [b[0].id, b[1].id],
+        [a[0].id, b[0].id], [a[0].id, b[1].id], [a[1].id, b[0].id], [a[1].id, b[1].id],
+      ];
+      pairs.forEach(([x, y]) => {
+        const c = todayPairCount(x, y);
+        todayPenalty += c >= 3 ? 500 : c * c * 6;
+      });
+    }
+
+    // 3) 실력 밸런스 — 모드에 따라 가중치가 달라져요
+    const skillA = skillOf ? (skillOf(a[0].id) + skillOf(a[1].id)) / 2 : 0;
+    const skillB = skillOf ? (skillOf(b[0].id) + skillOf(b[1].id)) / 2 : 0;
+    const skillGap = Math.abs(skillA - skillB);
+    let skillWeight = 8;
+    if (mode === "random") skillWeight = 0;
+    else if (mode === "skill") skillWeight = 14; // 실력전: 팀간 실력차를 더 엄격하게
+    const skillScore = skillGap * skillWeight;
+
+    // 4) 균형 모드에서는 왕초보/초보끼리만 뭉치지 않도록, 팀 내부 실력차가 "적당히" 섞이는 조합을 살짝 선호
+    let mixBonus = 0;
+    if (mode === "balance" && skillOf) {
+      const teamAGap = Math.abs(skillOf(a[0].id) - skillOf(a[1].id));
+      const teamBGap = Math.abs(skillOf(b[0].id) - skillOf(b[1].id));
+      // 팀 내부가 너무 똑같은 하위권끼리만 묶이는 것 방지 (아주 약하게만 유도)
+      mixBonus = -(teamAGap + teamBGap) * 1.5;
+    }
+
+    // 5) 첫 참석자는 고수/친절왕과 한 팀이 되도록 살짝 유도
+    let firstTimerBonus = 0;
+    if (isFirstTimer && isKindOrStrong) {
+      [[a[0], a[1]], [b[0], b[1]]].forEach(([p1, p2]) => {
+        if (isFirstTimer(p1.id) && isKindOrStrong(p2.id)) firstTimerBonus -= 6;
+        if (isFirstTimer(p2.id) && isKindOrStrong(p1.id)) firstTimerBonus -= 6;
+      });
+    }
+
+    const s = historyScore + todayPenalty + skillScore + mixBonus + firstTimerBonus;
     if (!best || s < best.s) best = { s, a, b };
   }
   return best;
@@ -83,7 +121,7 @@ function generateRound(players, numCourts, hist, restIds = new Set(), skillOf = 
     const courts = [];
     for (let i = 0; i < shuffled.length; i += 4) {
       const four = shuffled.slice(i, i + 4);
-      const { s, a, b } = splitScore(four, hist, skillOf);
+      const { s, a, b } = splitScore(four, { hist, skillOf, mode: "balance", todayPairCount: () => 0, isFirstTimer: () => false, isKindOrStrong: () => false });
       total += s;
       courts.push({ teamA: a, teamB: b });
     }
@@ -107,7 +145,8 @@ function generateRound(players, numCourts, hist, restIds = new Set(), skillOf = 
 }
 
 // ---------- main app ----------
-function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onCancel }) {
+function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onCancel, pinnedPair, onTogglePin }) {
+  const selectedPlayers = waitingPlayers.filter((p) => selected.includes(p.id));
   return (
     <div className="text-left bg-stone-50 rounded-xl p-3 space-y-2">
       <p className="text-xs font-semibold text-stone-600">직접 선택 ({selected.length}/4)</p>
@@ -130,6 +169,28 @@ function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onCancel 
               </button>
             );
           })}
+        </div>
+      )}
+      {selected.length === 4 && (
+        <div className="pt-1 border-t border-stone-200">
+          <p className="text-[11px] text-stone-500 mt-2 mb-1">🔗 이 중 두 명을 같은 팀으로 고정 (선택)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {selectedPlayers.map((p) => {
+              const pinned = pinnedPair.includes(p.id);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => onTogglePin(p.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] border transition ${
+                    pinned ? "text-white border-transparent" : "bg-white text-stone-400 border-stone-200"
+                  }`}
+                  style={pinned ? { backgroundColor: "#FFD54F", color: "#5c4a00" } : {}}
+                >
+                  {pinned ? "🔗 " : ""}{p.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
       <div className="flex gap-2 pt-1">
@@ -172,6 +233,12 @@ function App() {
   const [restWish, setRestWish] = useState({});
   const [matchhistory, setMatchhistory] = useState([]);
   const [statsAdjust, setStatsAdjust] = useState({});
+  const [checkinlog, setCheckinlog] = useState([]);
+  const [matchMode, setMatchMode] = useState("balance"); // "random" | "balance" | "skill"
+  const [excluded, setExcluded] = useState([]);
+  const [waitStart, setWaitStart] = useState({});
+  const [lockedCourts, setLockedCourts] = useState([]);
+  const [kindVotes, setKindVotes] = useState([]);
   const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
   const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
   const ADMIN_PIN = window.ADMIN_PIN;
@@ -231,14 +298,126 @@ function App() {
       setStatsAdjust(data && data.data ? data.data : {});
     });
 
+    const unsub6 = REFS.courtmatches.onSnapshot((snap) => {
+      const data = snap.data();
+      setCourtMatches(data && data.data ? data.data : {});
+    }, () => {});
+
+    const unsub7 = REFS.checkinlog.onSnapshot((snap) => {
+      const data = snap.data();
+      setCheckinlog(data && data.items ? data.items : []);
+    }, () => {});
+
+    const unsub8 = REFS.matchmode.onSnapshot((snap) => {
+      const data = snap.data();
+      setMatchMode((data && data.mode) || "balance");
+      setExcluded((data && data.excluded) || []);
+      setWaitStart((data && data.waitStart) || {});
+      setLockedCourts((data && data.lockedCourts) || []);
+    }, () => {});
+
+    const unsub9 = REFS.kindvotes.onSnapshot((snap) => {
+      const data = snap.data();
+      setKindVotes(data && data.items ? data.items : []);
+    }, () => {});
+
     return () => {
       unsub1();
       unsub2();
       unsub3();
       unsub4();
       unsub5();
+      unsub6();
+      unsub7();
+      unsub8();
+      unsub9();
     };
   }, []);
+
+  // 매칭 모드 / 제외 회원 / 대기시작시각 / 코트 잠금을 한 문서에 같이 저장해요
+  function persistMatchSettings(patch) {
+    const next = {
+      mode: patch.mode !== undefined ? patch.mode : matchMode,
+      excluded: patch.excluded !== undefined ? patch.excluded : excluded,
+      waitStart: patch.waitStart !== undefined ? patch.waitStart : waitStart,
+      lockedCourts: patch.lockedCourts !== undefined ? patch.lockedCourts : lockedCourts,
+    };
+    setMatchMode(next.mode);
+    setExcluded(next.excluded);
+    setWaitStart(next.waitStart);
+    setLockedCourts(next.lockedCourts);
+    REFS.matchmode.set(next).catch(() => {});
+  }
+
+  function markWaiting(ids) {
+    const now = Date.now();
+    const nextWait = { ...waitStart };
+    ids.forEach((id) => { nextWait[id] = now; });
+    persistMatchSettings({ waitStart: nextWait });
+  }
+
+  function toggleExcluded(id) {
+    const next = excluded.includes(id) ? excluded.filter((x) => x !== id) : [...excluded, id];
+    persistMatchSettings({ excluded: next });
+  }
+
+  function toggleCourtLock(courtNum) {
+    const next = lockedCourts.includes(courtNum) ? lockedCourts.filter((x) => x !== courtNum) : [...lockedCourts, courtNum];
+    persistMatchSettings({ lockedCourts: next });
+  }
+
+  function voteKind(courtNum) {
+    const m = courtMatches[courtNum];
+    if (!m || !myId) return;
+    const allIds = [...m.teamA, ...m.teamB].map((p) => p.id);
+    if (!allIds.includes(myId)) {
+      window.alert("이 경기에 참여한 사람만 투표할 수 있어요.");
+      return;
+    }
+    const already = kindVotes.some((v) => v.matchId === m.id && v.voterId === myId);
+    if (already) return;
+    const votedFor = allIds.filter((id) => id !== myId);
+    const newVotes = votedFor.map((id) => ({ id: uid(), matchId: m.id, voterId: myId, votedForId: id, date: todayStr() }));
+    const next = [...kindVotes, ...newVotes];
+    setKindVotes(next);
+    REFS.kindvotes.set({ items: next }).catch(() => {});
+  }
+
+  // 오늘 이 두 사람이 이미 몇 번 같이(파트너든 상대든) 경기했는지
+  function todayPairCount(idA, idB) {
+    const today = todayStr();
+    let count = 0;
+    matchhistory.forEach((m) => {
+      if (m.date !== today) return;
+      const ids = [...(m.teamA || []), ...(m.teamB || [])].map((p) => p.id);
+      if (ids.includes(idA) && ids.includes(idB)) count++;
+    });
+    return count;
+  }
+
+  function isFirstTimer(id) {
+    return checkinlog.filter((c) => c.memberId === id).length <= 1;
+  }
+
+  function isKindOrStrong(id) {
+    const m = roster.find((r) => r.id === id);
+    if (m && m.manualBadges && (m.manualBadges.kind || m.manualBadges.chat)) return true;
+    return skillOf(id) >= 0.65;
+  }
+
+  // 코트별 진행중인 경기를 로컬 상태 + Firestore에 같이 저장해서, 다른 사람 화면에도 실시간으로 보여요
+  function persistCourtMatches(next) {
+    setCourtMatches(next);
+    REFS.courtmatches.set({ data: next }).catch(() => {});
+  }
+
+  // 오늘 몇 경기 했는지 — matchhistory(공유 저장소) 기준이라 기기 상관없이 다 같이 봐요
+  function todayGamesPlayed(id) {
+    const today = todayStr();
+    return matchhistory.filter(
+      (m) => m.date === today && ((m.teamA || []).some((p) => p.id === id) || (m.teamB || []).some((p) => p.id === id))
+    ).length;
+  }
 
   // 통산 전적(승/패/경기수) — matchhistory(영구 저장)에서 계산 + 관리자 수동 보정값 반영
   function lifetimeStatsFor(id) {
@@ -286,7 +465,11 @@ function App() {
 
   function skillOf(id) {
     const s = lifetimeStatsFor(id);
-    return s.games >= MIN_GAMES_FOR_TIER ? s.wins / s.games : 0.5;
+    if (s.games >= MIN_GAMES_FOR_TIER) return s.wins / s.games;
+    // 경기 수가 적으면 가입할 때 스스로 고른 레벨을 대신 참고해요
+    const m = roster.find((r) => r.id === id);
+    const lvl = m && m.level;
+    return (window.LEVEL_SKILL && window.LEVEL_SKILL[lvl]) || 0.5;
   }
 
   const tierBadge = { 상: { emoji: "🔥", color: "text-red-500" }, 중: { emoji: "➖", color: "text-stone-400" }, 하: { emoji: "🌱", color: "text-green-600" } };
@@ -344,6 +527,7 @@ function App() {
     CHECKIN_REF.set({ data: next }).catch(() => {});
     if (status === "in") {
       logAttendance(memberId);
+      markWaiting([memberId]);
       // 참석으로 표시하면 자동으로 오늘 참석자(매칭 대상) 명단에도 들어가요 — 따로 또 누를 필요 없어요
       setPlayers((p) => {
         if (p.some((x) => x.id === memberId)) return p;
@@ -456,14 +640,25 @@ function App() {
     if (m && !m.done) [...m.teamA, ...m.teamB].forEach((p) => occupiedIds.add(p.id));
   });
 
-  // 대기 중(체크인 했지만 지금 안 뛰고 있는) 선수들 — 게임 적게 한 사람 우선, 쉬고 싶어요 누른 사람 제외
+  // 대기 중(체크인 했지만 지금 안 뛰고 있는) 선수들 — 오래 쉰 사람 우선, 쉬고 싶어요/제외된 사람은 빠짐
   const waitingPlayers = players
-    .filter((p) => !occupiedIds.has(p.id) && !restWish[p.id])
-    .sort((a, b) => a.gamesPlayed - b.gamesPlayed || Math.random() - 0.5);
+    .filter((p) => !occupiedIds.has(p.id) && !restWish[p.id] && !excluded.includes(p.id))
+    .sort((a, b) => {
+      const wa = waitStart[a.id] || 0;
+      const wb = waitStart[b.id] || 0;
+      if (wa !== wb) return wa - wb; // 대기 시작이 이를수록(오래 쉬었을수록) 우선
+      return todayGamesPlayed(a.id) - todayGamesPlayed(b.id) || Math.random() - 0.5;
+    });
+
+  const matchCtx = { hist, skillOf, mode: matchMode, todayPairCount, isFirstTimer, isKindOrStrong };
 
   function startMatchOnCourt(courtNum) {
     if (!adminOn) {
       tryAdminUnlock();
+      return;
+    }
+    if (lockedCourts.includes(courtNum)) {
+      window.alert("이 코트는 잠겨있어요. 잠금을 풀고 다시 시도해주세요.");
       return;
     }
     if (waitingPlayers.length < 4) {
@@ -471,23 +666,29 @@ function App() {
       return;
     }
     const four = waitingPlayers.slice(0, 4);
-    const { a, b } = splitScore(four, hist, skillOf);
+    const { a, b } = splitScore(four, matchCtx);
     const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
-    setCourtMatches((prev) => ({ ...prev, [courtNum]: match }));
+    persistCourtMatches({ ...courtMatches, [courtNum]: match });
     setMatchSeq((n) => n + 1);
     setTab("match");
     setJustShuffled(true);
     setTimeout(() => setJustShuffled(false), 500);
   }
 
-  // ---- 관리자가 직접 4명 골라서 코트에 배정하기 ----
+  // ---- 관리자가 직접 4명 골라서 코트에 배정하기 (+ 특정 두 명을 같은 팀으로 고정) ----
   const [manualCourt, setManualCourt] = useState(null);
   const [manualSelected, setManualSelected] = useState([]);
+  const [pinnedPair, setPinnedPair] = useState([]);
 
   function toggleManualPick(id) {
     setManualSelected((sel) =>
       sel.includes(id) ? sel.filter((x) => x !== id) : sel.length < 4 ? [...sel, id] : sel
     );
+    setPinnedPair((p) => p.filter((x) => x !== id)); // 선택 해제되면 고정도 같이 풀림
+  }
+
+  function togglePin(id) {
+    setPinnedPair((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length < 2 ? [...p, id] : p));
   }
 
   function openManualPick(courtNum) {
@@ -497,34 +698,53 @@ function App() {
     }
     setManualCourt(courtNum);
     setManualSelected([]);
+    setPinnedPair([]);
   }
 
   function cancelManualPick() {
     setManualCourt(null);
     setManualSelected([]);
+    setPinnedPair([]);
   }
 
   function confirmManualStart(courtNum) {
     if (manualSelected.length !== 4) return;
     const four = players.filter((p) => manualSelected.includes(p.id));
-    const { a, b } = splitScore(four, hist, skillOf);
+    let a, b;
+    if (pinnedPair.length === 2) {
+      // 고정된 두 명을 한 팀으로 묶고, 나머지 둘이 상대 팀
+      a = four.filter((p) => pinnedPair.includes(p.id));
+      b = four.filter((p) => !pinnedPair.includes(p.id));
+    } else {
+      ({ a, b } = splitScore(four, matchCtx));
+    }
     const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
-    setCourtMatches((prev) => ({ ...prev, [courtNum]: match }));
+    persistCourtMatches({ ...courtMatches, [courtNum]: match });
     setMatchSeq((n) => n + 1);
     setManualCourt(null);
     setManualSelected([]);
+    setPinnedPair([]);
     setTab("match");
     setJustShuffled(true);
     setTimeout(() => setJustShuffled(false), 500);
   }
 
+  // 관리자: 이미 시작한(아직 안 끝난) 경기도 팀을 다시 섞어요
+  function reshuffleCourt(courtNum) {
+    if (!adminOn) { tryAdminUnlock(); return; }
+    const m = courtMatches[courtNum];
+    if (!m) return;
+    const four = [...m.teamA, ...m.teamB];
+    const { a, b } = splitScore(four, matchCtx);
+    const match = { ...m, teamA: a, teamB: b, scoreA: "", scoreB: "" };
+    persistCourtMatches({ ...courtMatches, [courtNum]: match });
+  }
+
   function updateScore(courtNum, side, value) {
     if (!/^\d{0,2}$/.test(value)) return;
-    setCourtMatches((prev) => {
-      const m = prev[courtNum];
-      if (!m) return prev;
-      return { ...prev, [courtNum]: { ...m, [side]: value } };
-    });
+    const m = courtMatches[courtNum];
+    if (!m) return;
+    persistCourtMatches({ ...courtMatches, [courtNum]: { ...m, [side]: value } });
   }
 
   function finishMatch(courtNum) {
@@ -566,8 +786,10 @@ function App() {
       scoreB: m.scoreB,
     });
 
-    setCourtMatches((prev) => ({ ...prev, [courtNum]: finished }));
+    persistCourtMatches({ ...courtMatches, [courtNum]: finished });
+    markWaiting([...m.teamA, ...m.teamB].map((p) => p.id)); // 방금 끝난 사람들은 지금부터 대기 시작
   }
+
 
   return (
     <RequireLogin myId={myId}>
@@ -759,6 +981,31 @@ function App() {
             </div>
           </div>
 
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+            <p className="text-sm font-semibold mb-1">매칭 모드</p>
+            <p className="text-[11px] text-stone-400 mb-2">
+              {matchMode === "random" && "완전 무작위로 섞어요."}
+              {matchMode === "balance" && "실력 차이, 오늘 만난 횟수, 첫 참석 여부를 종합해서 가장 공평한 팀을 짜요. (추천)"}
+              {matchMode === "skill" && "팀 간 실력 차이를 최대한 엄격하게 맞춰요."}
+            </p>
+            <div className="flex gap-1.5">
+              {[
+                { key: "random", label: "🎲 랜덤" },
+                { key: "balance", label: "⚖️ 균형" },
+                { key: "skill", label: "🔥 실력전" },
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => adminOn ? persistMatchSettings({ mode: opt.key }) : tryAdminUnlock()}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold tap-scale ${matchMode === opt.key ? "text-white" : "bg-stone-50 text-stone-500"}`}
+                  style={matchMode === opt.key ? { backgroundColor: "#4CAF50" } : {}}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <p className="text-sm font-semibold mb-2">오늘 참석자 ({players.length}명)</p>
             <p className="text-[11px] text-[#4CAF50] mb-1">✅ 여기서 이름을 탭하면 바로 참석 처리돼요 — 따로 체크인 안 눌러도 매칭에 자동으로 들어가요.</p>
@@ -773,21 +1020,34 @@ function App() {
                   const stats = lifetimeStatsFor(p.id);
                   const tier = tierMap[p.id];
                   const badge = tierBadge[tier];
+                  const rosterMember = roster.find((r) => r.id === p.id);
+                  const showLevel = stats.games < MIN_GAMES_FOR_TIER && rosterMember && rosterMember.level;
+                  const isExcluded = excluded.includes(p.id);
                   return (
                   <li
                     key={p.id}
-                    className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200"
+                    className={`bg-white rounded-xl px-4 py-3 flex items-center justify-between border ${isExcluded ? "border-red-200 opacity-60" : "border-stone-200"}`}
                   >
                     <div>
                       <p className="text-sm font-medium flex items-center gap-1">
                         {p.name}
+                        {isFirstTimer(p.id) && <span className="text-xs">🌱</span>}
                         {badge && <span className={`text-xs ${badge.color}`}>{badge.emoji} {tier}</span>}
+                        {showLevel && <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-full">{rosterMember.level}</span>}
+                        {isExcluded && <span className="text-[10px] text-red-400 bg-red-50 px-1.5 py-0.5 rounded-full">매칭 제외됨</span>}
                       </p>
                       <p className="text-xs text-stone-400 scorefont">
-                        오늘 {p.gamesPlayed}경기 · 통산 {stats.wins}승 {stats.losses}패
+                        오늘 {todayGamesPlayed(p.id)}경기 · 통산 {stats.wins}승 {stats.losses}패
                       </p>
                     </div>
-                    <button onClick={() => removePlayer(p.id)} className="text-red-500">✕</button>
+                    <div className="flex items-center gap-2">
+                      {adminOn && (
+                        <button onClick={() => toggleExcluded(p.id)} className="text-[11px] text-stone-400 underline underline-offset-2">
+                          {isExcluded ? "제외 해제" : "매칭 제외"}
+                        </button>
+                      )}
+                      <button onClick={() => removePlayer(p.id)} className="text-red-500">✕</button>
+                    </div>
                   </li>
                   );
                 })}
@@ -921,16 +1181,25 @@ function App() {
             const isManualHere = manualCourt === courtNum;
             return (
               <div key={courtNum} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-                <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
-                  <span>Court {courtNum}</span>
-                  {m && m.done && <span className="text-[#FFD54F]">종료</span>}
-                  {m && !m.done && <span className="text-[#FFD54F]">경기중</span>}
-                  {!m && <span className="text-white/60">비어있음</span>}
+                <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between items-center">
+                  <span>Court {courtNum} {lockedCourts.includes(courtNum) && "🔒"}</span>
+                  <div className="flex items-center gap-2">
+                    {m && m.done && <span className="text-[#FFD54F]">종료</span>}
+                    {m && !m.done && <span className="text-[#FFD54F]">경기중</span>}
+                    {!m && <span className="text-white/60">비어있음</span>}
+                    {adminOn && (
+                      <button onClick={() => toggleCourtLock(courtNum)} className="text-white/70 text-[10px] normal-case tracking-normal underline underline-offset-2">
+                        {lockedCourts.includes(courtNum) ? "잠금해제" : "잠그기"}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {!m ? (
                   <div className="p-5 text-center space-y-2">
-                    {!isManualHere ? (
+                    {lockedCourts.includes(courtNum) ? (
+                      <p className="text-xs text-stone-400">🔒 이 코트는 잠겨있어요.</p>
+                    ) : !isManualHere ? (
                       <>
                         <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
                         <button
@@ -956,6 +1225,8 @@ function App() {
                         onToggle={toggleManualPick}
                         onConfirm={() => confirmManualStart(courtNum)}
                         onCancel={cancelManualPick}
+                        pinnedPair={pinnedPair}
+                        onTogglePin={togglePin}
                       />
                     )}
                   </div>
@@ -996,15 +1267,31 @@ function App() {
                       />
                     </div>
                     {!m.done ? (
-                      <button
-                        onClick={() => finishMatch(courtNum)}
-                        disabled={m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB}
-                        className="w-full py-2.5 text-sm font-semibold bg-[#FFD54F] text-[#5c4a00] disabled:bg-stone-200 disabled:text-stone-400"
-                      >
-                        경기 종료
-                      </button>
+                      <div className="px-4 pb-4 space-y-2">
+                        <button
+                          onClick={() => finishMatch(courtNum)}
+                          disabled={m.scoreA === "" || m.scoreB === "" || m.scoreA === m.scoreB}
+                          className="w-full py-2.5 text-sm font-semibold bg-[#FFD54F] text-[#5c4a00] disabled:bg-stone-200 disabled:text-stone-400 rounded-xl"
+                        >
+                          경기 종료
+                        </button>
+                        {adminOn && (
+                          <button onClick={() => reshuffleCourt(courtNum)} className="w-full py-2 text-xs font-semibold border border-stone-200 text-stone-500 rounded-xl">
+                            🔀 팀 다시 섞기
+                          </button>
+                        )}
+                      </div>
                     ) : !isManualHere ? (
                       <div className="px-4 pb-4 space-y-2">
+                        {myId && [...m.teamA, ...m.teamB].some((p) => p.id === myId) && (
+                          !kindVotes.some((v) => v.matchId === m.id && v.voterId === myId) ? (
+                            <button onClick={() => voteKind(courtNum)} className="w-full py-2 text-xs font-semibold rounded-xl border" style={{ borderColor: "#FFD54F", color: "#B98900" }}>
+                              👍 이분들과 또 치고 싶어요 (익명)
+                            </button>
+                          ) : (
+                            <p className="text-[11px] text-stone-400 text-center">투표 완료! 감사해요 🙏</p>
+                          )
+                        )}
                         <button
                           onClick={() => startMatchOnCourt(courtNum)}
                           className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white rounded-xl"
@@ -1029,6 +1316,8 @@ function App() {
                           onToggle={toggleManualPick}
                           onConfirm={() => confirmManualStart(courtNum)}
                           onCancel={cancelManualPick}
+                          pinnedPair={pinnedPair}
+                          onTogglePin={togglePin}
                         />
                       </div>
                     )}
