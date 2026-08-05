@@ -107,6 +107,48 @@ function generateRound(players, numCourts, hist, restIds = new Set(), skillOf = 
 }
 
 // ---------- main app ----------
+function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onCancel }) {
+  return (
+    <div className="text-left bg-stone-50 rounded-xl p-3 space-y-2">
+      <p className="text-xs font-semibold text-stone-600">직접 선택 ({selected.length}/4)</p>
+      {waitingPlayers.length === 0 ? (
+        <p className="text-xs text-stone-400">대기 중인 인원이 없어요.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {waitingPlayers.map((p) => {
+            const picked = selected.includes(p.id);
+            return (
+              <button
+                key={p.id}
+                onClick={() => onToggle(p.id)}
+                className={`px-2.5 py-1 rounded-full text-xs border transition ${
+                  picked ? "text-white border-transparent" : "bg-white text-stone-500 border-stone-200"
+                }`}
+                style={picked ? { backgroundColor: "#4CAF50" } : {}}
+              >
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex gap-2 pt-1">
+        <button
+          disabled={selected.length !== 4}
+          onClick={onConfirm}
+          className="flex-1 rounded-lg py-2 text-xs font-semibold text-white disabled:bg-stone-300 disabled:text-stone-500"
+          style={selected.length === 4 ? { backgroundColor: "#4CAF50" } : {}}
+        >
+          이 4명으로 시작
+        </button>
+        <button onClick={onCancel} className="flex-1 rounded-lg py-2 text-xs font-semibold border border-stone-200 text-stone-500">
+          취소
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [tab, setTab] = useState("players");
   const [players, setPlayers] = useState([]);
@@ -433,6 +475,44 @@ function App() {
     const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
     setCourtMatches((prev) => ({ ...prev, [courtNum]: match }));
     setMatchSeq((n) => n + 1);
+    setTab("match");
+    setJustShuffled(true);
+    setTimeout(() => setJustShuffled(false), 500);
+  }
+
+  // ---- 관리자가 직접 4명 골라서 코트에 배정하기 ----
+  const [manualCourt, setManualCourt] = useState(null);
+  const [manualSelected, setManualSelected] = useState([]);
+
+  function toggleManualPick(id) {
+    setManualSelected((sel) =>
+      sel.includes(id) ? sel.filter((x) => x !== id) : sel.length < 4 ? [...sel, id] : sel
+    );
+  }
+
+  function openManualPick(courtNum) {
+    if (!adminOn) {
+      tryAdminUnlock();
+      return;
+    }
+    setManualCourt(courtNum);
+    setManualSelected([]);
+  }
+
+  function cancelManualPick() {
+    setManualCourt(null);
+    setManualSelected([]);
+  }
+
+  function confirmManualStart(courtNum) {
+    if (manualSelected.length !== 4) return;
+    const four = players.filter((p) => manualSelected.includes(p.id));
+    const { a, b } = splitScore(four, hist, skillOf);
+    const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
+    setCourtMatches((prev) => ({ ...prev, [courtNum]: match }));
+    setMatchSeq((n) => n + 1);
+    setManualCourt(null);
+    setManualSelected([]);
     setTab("match");
     setJustShuffled(true);
     setTimeout(() => setJustShuffled(false), 500);
@@ -818,13 +898,27 @@ function App() {
         <section className="px-5 mt-5 space-y-4">
           {waitingPlayers.length > 0 && (
             <div className="bg-stone-100 rounded-2xl p-4 border border-stone-200">
-              <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">⏳ 대기 중 ({waitingPlayers.length}명)</p>
-              <p className="text-sm">{waitingPlayers.map((p) => p.name).join(", ")}</p>
+              <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">⏳ 대기 중 ({waitingPlayers.length}명)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {waitingPlayers.map((p, i) => (
+                  <span
+                    key={p.id}
+                    className={`text-xs px-2.5 py-1 rounded-full ${i < 4 ? "text-white font-semibold" : "bg-white text-stone-500 border border-stone-200"}`}
+                    style={i < 4 ? { backgroundColor: "#4CAF50" } : {}}
+                  >
+                    {i < 4 ? "🔜 " : ""}{p.name}
+                  </span>
+                ))}
+              </div>
+              {waitingPlayers.length >= 4 && (
+                <p className="text-[11px] text-stone-400 mt-2">🔜 표시된 4명이 다음 코트가 열리면 우선 배정돼요.</p>
+              )}
             </div>
           )}
 
           {Array.from({ length: numCourts }, (_, i) => i + 1).map((courtNum) => {
             const m = courtMatches[courtNum];
+            const isManualHere = manualCourt === courtNum;
             return (
               <div key={courtNum} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
                 <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between">
@@ -835,14 +929,35 @@ function App() {
                 </div>
 
                 {!m ? (
-                  <div className="p-5 text-center space-y-3">
-                    <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
-                    <button
-                      onClick={() => startMatchOnCourt(courtNum)}
-                      className="w-full rounded-xl py-3 font-semibold text-sm bg-[#4CAF50] text-white active:scale-[0.98] transition"
-                    >
-                      🔀 이 코트 경기 시작 {!adminOn && "🔒"}
-                    </button>
+                  <div className="p-5 text-center space-y-2">
+                    {!isManualHere ? (
+                      <>
+                        <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
+                        <button
+                          onClick={() => startMatchOnCourt(courtNum)}
+                          className="w-full rounded-xl py-3 font-semibold text-sm bg-[#4CAF50] text-white active:scale-[0.98] transition"
+                        >
+                          🔀 이 코트 경기 시작 {!adminOn && "🔒"}
+                        </button>
+                        {adminOn && (
+                          <button
+                            onClick={() => openManualPick(courtNum)}
+                            className="w-full rounded-xl py-2 text-xs font-semibold border"
+                            style={{ borderColor: "#FFD54F", color: "#B98900" }}
+                          >
+                            ✋ 직접 4명 선택해서 시작
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <ManualPicker
+                        waitingPlayers={waitingPlayers}
+                        selected={manualSelected}
+                        onToggle={toggleManualPick}
+                        onConfirm={() => confirmManualStart(courtNum)}
+                        onCancel={cancelManualPick}
+                      />
+                    )}
                   </div>
                 ) : (
                   <>
@@ -888,13 +1003,34 @@ function App() {
                       >
                         경기 종료
                       </button>
+                    ) : !isManualHere ? (
+                      <div className="px-4 pb-4 space-y-2">
+                        <button
+                          onClick={() => startMatchOnCourt(courtNum)}
+                          className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white rounded-xl"
+                        >
+                          🔀 이 코트 다음 경기 시작 {!adminOn && "🔒"}
+                        </button>
+                        {adminOn && (
+                          <button
+                            onClick={() => openManualPick(courtNum)}
+                            className="w-full rounded-xl py-2 text-xs font-semibold border"
+                            style={{ borderColor: "#FFD54F", color: "#B98900" }}
+                          >
+                            ✋ 직접 4명 선택해서 시작
+                          </button>
+                        )}
+                      </div>
                     ) : (
-                      <button
-                        onClick={() => startMatchOnCourt(courtNum)}
-                        className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white"
-                      >
-                        🔀 이 코트 다음 경기 시작 {!adminOn && "🔒"}
-                      </button>
+                      <div className="px-4 pb-4">
+                        <ManualPicker
+                          waitingPlayers={waitingPlayers}
+                          selected={manualSelected}
+                          onToggle={toggleManualPick}
+                          onConfirm={() => confirmManualStart(courtNum)}
+                          onCancel={cancelManualPick}
+                        />
+                      </div>
                     )}
                   </>
                 )}
@@ -904,7 +1040,7 @@ function App() {
 
           <div className="bg-white rounded-2xl p-4 border border-stone-200">
             <p className="text-xs font-semibold text-stone-500 mb-1">다음 경기는 쉴래요</p>
-            <p className="text-xs text-stone-400 mb-2">본인 이름만 눌려요. 누르면 그 코트가 다음 경기를 시작할 때 대기 명단에서 빠져요. 아래 목록은 관리자를 포함해 모두에게 실시간으로 보여요.</p>
+            <p className="text-xs text-stone-400 mb-2">본인 이름은 언제든 누를 수 있고, 관리자는 다른 사람 대신 눌러줄 수도 있어요. 누르면 다음 경기 시작할 때 대기 명단에서 빠져요. 아래 목록은 관리자를 포함해 모두에게 실시간으로 보여요.</p>
             {Object.keys(restWish).length > 0 && (
               <p className="text-xs font-semibold mb-2" style={{ color: "#4CAF50" }}>
                 ✋ 쉬고 싶어하는 사람: {players.filter((p) => restWish[p.id]).map((p) => p.name).join(", ") || "-"}
@@ -914,14 +1050,15 @@ function App() {
               {players.map((p) => {
                 const wantsRest = !!restWish[p.id];
                 const isMe = p.id === myId;
+                const canToggle = isMe || adminOn;
                 return (
                   <button
                     key={p.id}
-                    disabled={!isMe}
+                    disabled={!canToggle}
                     onClick={() => toggleRestWish(p.id)}
                     className={`px-3 py-1.5 rounded-full text-xs border transition ${
                       wantsRest ? "bg-stone-800 text-white border-stone-800" : "bg-stone-50 text-stone-500 border-stone-200"
-                    } ${!isMe ? "opacity-40 cursor-not-allowed" : ""}`}
+                    } ${!canToggle ? "opacity-40 cursor-not-allowed" : ""}`}
                   >
                     {p.name} {wantsRest ? "· 쉼" : ""}
                   </button>
@@ -967,15 +1104,16 @@ function App() {
 
           <div>
             <p className="text-sm font-semibold mb-2">📋 경기 기록</p>
-            {history.length === 0 ? (
+            <p className="text-[11px] text-stone-400 mb-2">저장돼서 새로고침해도 안 사라져요.</p>
+            {matchhistory.length === 0 ? (
               <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
                 아직 종료된 경기가 없어요.
               </p>
             ) : (
               <ul className="space-y-2">
-                {history.map((m) => (
+                {matchhistory.slice(0, 50).map((m) => (
                   <li key={m.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 text-sm">
-                    <p className="text-[11px] text-stone-400 mb-1">R{m.round} · Court {m.court}</p>
+                    <p className="text-[11px] text-stone-400 mb-1">{m.date} · Court {m.court}</p>
                     <div className="flex justify-between items-center">
                       <span>{m.teamA[0].name}·{m.teamA[1].name}</span>
                       <span className="scorefont font-semibold">{m.scoreA} : {m.scoreB}</span>
