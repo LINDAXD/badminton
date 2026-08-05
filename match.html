@@ -36,7 +36,7 @@ function bump(map, key) {
 }
 
 // score a single 4-person court split
-function splitScore(four, hist) {
+function splitScore(four, hist, skillOf) {
   const splits = [
     [[four[0], four[1]], [four[2], four[3]]],
     [[four[0], four[2]], [four[1], four[3]]],
@@ -44,19 +44,26 @@ function splitScore(four, hist) {
   ];
   let best = null;
   for (const [a, b] of splits) {
-    const s =
+    const historyScore =
       (hist.partner[pKey(a[0].id, a[1].id)] || 0) * 3 +
       (hist.partner[pKey(b[0].id, b[1].id)] || 0) * 3 +
       (hist.opponent[pKey(a[0].id, b[0].id)] || 0) +
       (hist.opponent[pKey(a[0].id, b[1].id)] || 0) +
       (hist.opponent[pKey(a[1].id, b[0].id)] || 0) +
       (hist.opponent[pKey(a[1].id, b[1].id)] || 0);
+    // 실력 밸런스: 두 팀의 평균 승률 차이가 클수록 페널티 (잘하는 사람끼리 몰리는 것 방지)
+    const skillGap = skillOf
+      ? Math.abs(
+          (skillOf(a[0].id) + skillOf(a[1].id)) / 2 - (skillOf(b[0].id) + skillOf(b[1].id)) / 2
+        ) * 8
+      : 0;
+    const s = historyScore + skillGap;
     if (!best || s < best.s) best = { s, a, b };
   }
   return best;
 }
 
-function generateRound(players, numCourts, hist, restIds = new Set()) {
+function generateRound(players, numCourts, hist, restIds = new Set(), skillOf = null) {
   const forcedRest = players.filter((p) => restIds.has(p.id));
   const pool = players.filter((p) => !restIds.has(p.id));
 
@@ -76,7 +83,7 @@ function generateRound(players, numCourts, hist, restIds = new Set()) {
     const courts = [];
     for (let i = 0; i < shuffled.length; i += 4) {
       const four = shuffled.slice(i, i + 4);
-      const { s, a, b } = splitScore(four, hist);
+      const { s, a, b } = splitScore(four, hist, skillOf);
       total += s;
       courts.push({ teamA: a, teamB: b });
     }
@@ -211,6 +218,36 @@ function App() {
     }
     return { games, wins: Math.max(0, wins), losses: Math.max(0, losses) };
   }
+
+  const MIN_GAMES_FOR_TIER = 3;
+
+  // 승률 기반 실력 등급(상/중/하) — 오늘 참석자 안에서 상대적으로 나눠요
+  const tierMap = (() => {
+    const withRate = players.map((p) => {
+      const s = lifetimeStatsFor(p.id);
+      const rate = s.games >= MIN_GAMES_FOR_TIER ? s.wins / s.games : null;
+      return { id: p.id, rate };
+    });
+    const ranked = withRate.filter((p) => p.rate !== null).sort((a, b) => b.rate - a.rate);
+    const n = ranked.length;
+    const topCut = Math.ceil(n / 3);
+    const midCut = Math.ceil((n * 2) / 3);
+    const map = {};
+    ranked.forEach((p, i) => {
+      map[p.id] = i < topCut ? "상" : i < midCut ? "중" : "하";
+    });
+    withRate.forEach((p) => {
+      if (map[p.id] === undefined) map[p.id] = "중"; // 경기 수 부족하면 중간 취급
+    });
+    return map;
+  })();
+
+  function skillOf(id) {
+    const s = lifetimeStatsFor(id);
+    return s.games >= MIN_GAMES_FOR_TIER ? s.wins / s.games : 0.5;
+  }
+
+  const tierBadge = { 상: { emoji: "🔥", color: "text-red-500" }, 중: { emoji: "➖", color: "text-stone-400" }, 하: { emoji: "🌱", color: "text-green-600" } };
 
   // 관리자가 개인 전적을 직접 원하는 값으로 고쳐요 (실제 경기기록은 그대로 두고, 보정값만 얹어요)
   function correctPlayerStats(p) {
@@ -372,7 +409,7 @@ function App() {
     }
     const courts = Math.min(numCourts, maxCourts);
     const restIds = new Set(Object.keys(restWish));
-    const { matches, resting } = generateRound(players, courts, hist, restIds);
+    const { matches, resting } = generateRound(players, courts, hist, restIds, skillOf);
     setRound({ matches, resting });
     setRoundNum((n) => n + 1);
     setTab("match");
@@ -626,7 +663,8 @@ function App() {
 
           <div>
             <p className="text-sm font-semibold mb-2">오늘 참석자 ({players.length}명)</p>
-            <p className="text-[11px] text-[#4CAF50] mb-2">🔄 체크인에서 "참석" 누르면 자동으로 여기 반영돼요.</p>
+            <p className="text-[11px] text-[#4CAF50] mb-1">🔄 체크인에서 "참석" 누르면 자동으로 여기 반영돼요.</p>
+            <p className="text-[11px] text-stone-400 mb-2">🔥상위 · ➖중위 · 🌱하위 등급으로 나눠서, 매칭 생성할 때 자동으로 실력 밸런스를 맞춰요. (최소 {MIN_GAMES_FOR_TIER}경기 이상부터 등급 계산돼요)</p>
             {players.length === 0 ? (
               <p className="text-sm text-stone-400 bg-white rounded-2xl p-5 text-center border border-dashed border-stone-300">
                 위 고정 멤버를 탭해서 오늘 참석자를 체크해주세요.
@@ -635,13 +673,18 @@ function App() {
               <ul className="space-y-2">
                 {players.map((p) => {
                   const stats = lifetimeStatsFor(p.id);
+                  const tier = tierMap[p.id];
+                  const badge = tierBadge[tier];
                   return (
                   <li
                     key={p.id}
                     className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200"
                   >
                     <div>
-                      <p className="text-sm font-medium">{p.name}</p>
+                      <p className="text-sm font-medium flex items-center gap-1">
+                        {p.name}
+                        {badge && <span className={`text-xs ${badge.color}`}>{badge.emoji} {tier}</span>}
+                      </p>
                       <p className="text-xs text-stone-400 scorefont">
                         오늘 {p.gamesPlayed}경기 · 통산 {stats.wins}승 {stats.losses}패
                       </p>
