@@ -26,6 +26,20 @@ function fmtBirthday(b) {
   return `${b.slice(0, 2)}월 ${b.slice(2, 4)}일`;
 }
 
+// 출생연도로 만 나이를 계산해요 (관리자만 볼 수 있는 정보예요)
+function computeAge(birthYear, birthday) {
+  if (!birthYear) return null;
+  const now = new Date();
+  let age = now.getFullYear() - birthYear;
+  if (birthday && birthday.length === 4) {
+    const mm = parseInt(birthday.slice(0, 2), 10) - 1;
+    const dd = parseInt(birthday.slice(2, 4), 10);
+    const hadBirthdayThisYear = now.getMonth() > mm || (now.getMonth() === mm && now.getDate() >= dd);
+    if (!hadBirthdayThisYear) age -= 1;
+  }
+  return age;
+}
+
 // ---------- 앱 내장 팝업 (브라우저 기본 prompt/confirm/alert 대체) ----------
 // 브라우저 기본 팝업은 위에 사이트 주소가 무조건 뜨는데(보안상 못 없앰), 이 컴포넌트는 그냥 화면 안의
 // 일반 UI라서 주소가 전혀 안 보여요. 각 페이지의 App()에서 <AppModalHost /> 한 번만 렌더링하면 돼요.
@@ -177,6 +191,20 @@ function todayScheduleAttendees(scheduleItems) {
     confirmed.forEach((r) => { if (!seen.has(r.id)) seen.set(r.id, { id: r.id, name: r.name }); });
   });
   return [...seen.values()];
+}
+
+// 일정(RSVP)으로 참석 잡힌 사람 + 관리자가 매칭 페이지 "참석자 관리"에서 직접 체크인시킨 사람(checkinlog에 오늘 날짜로 찍힌 사람)을 합쳐요.
+// 체크인 경로가 두 개(일정 RSVP / 관리자 직접 체크인)라서, 한쪽만 보면 실제로 참석했는데도 "참석자 아님"으로 잘못 판단되는 경우가 있었어요.
+function combinedTodayAttendees(scheduleItems, checkinlog, roster) {
+  const map = new Map();
+  todayScheduleAttendees(getEffectiveAttendanceEvents(scheduleItems)).forEach((a) => map.set(a.id, a));
+  const today = todayStr();
+  (checkinlog || []).forEach((c) => {
+    if (c.date !== today || map.has(c.memberId)) return;
+    const m = (roster || []).find((r) => r.id === c.memberId);
+    if (m) map.set(m.id, { id: m.id, name: m.name });
+  });
+  return [...map.values()];
 }
 
 function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
@@ -456,7 +484,12 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
             </div>
             <div className="bg-stone-50 rounded-xl p-3">
               <p className="text-[11px] text-stone-400">생일</p>
-              <p className="text-sm font-semibold text-stone-800">{member.birthday ? fmtBirthday(member.birthday) : "-"}</p>
+              <p className="text-sm font-semibold text-stone-800">
+                {member.birthday ? fmtBirthday(member.birthday) : "-"}
+                {isAdmin && member.birthYear && (
+                  <span className="text-stone-400 font-normal"> · {computeAge(member.birthYear, member.birthday)}세</span>
+                )}
+              </p>
             </div>
             <div className="bg-stone-50 rounded-xl p-3">
               <p className="text-[11px] text-stone-400">경력</p>

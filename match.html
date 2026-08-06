@@ -759,18 +759,54 @@ function App() {
   function removePlayer(id) {
     if (String(id).startsWith("guest_")) {
       setPlayers((p) => p.filter((x) => x.id !== id));
+      REFS.guestlist.get().then((snap) => {
+        const data = snap.data() || {};
+        const items = (data.items || []).filter((g) => g.id !== id);
+        REFS.guestlist.set({ items }).catch(() => {});
+      }).catch(() => {});
       return;
     }
     setMyRsvp(id, "out");
   }
 
   const [guestName, setGuestName] = useState("");
+  const [guestlist, setGuestlist] = useState([]);
+
+  useEffect(() => {
+    const unsub = REFS.guestlist.onSnapshot((snap) => {
+      const data = snap.data();
+      setGuestlist(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  // 오늘 날짜로 등록된 게스트를 참석자 명단에 자동으로 채워요 — 이전엔 로컬 상태에만 있어서
+  // 다른 페이지로 이동했다 돌아오면(=새로고침) 사라지는 버그가 있었어요. 이제 Firestore에 저장돼서 안 사라져요.
+  useEffect(() => {
+    const todayGuests = guestlist.filter((g) => g.date === todayStr());
+    if (!todayGuests.length) return;
+    setPlayers((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id));
+      const toAdd = todayGuests.filter((g) => !existingIds.has(g.id));
+      if (!toAdd.length) return prev;
+      return [...prev, ...toAdd.map((g) => ({ id: g.id, name: `${g.name} (게스트)`, gamesPlayed: 0, wins: 0, losses: 0 }))];
+    });
+  }, [guestlist]);
+
   function addGuest() {
     if (!adminOn) { tryAdminUnlock(); return; }
     const trimmed = guestName.trim();
     if (!trimmed) return;
     const guestId = "guest_" + uid();
+    const entry = { id: guestId, name: trimmed, date: todayStr() };
     setPlayers((p) => [...p, { id: guestId, name: `${trimmed} (게스트)`, gamesPlayed: 0, wins: 0, losses: 0 }]);
+    REFS.guestlist.get().then((snap) => {
+      const data = snap.data() || {};
+      const items = [...(data.items || []), entry];
+      REFS.guestlist.set({ items }).catch(() => {});
+    }).catch(() => {
+      REFS.guestlist.set({ items: [entry] }).catch(() => {});
+    });
     setGuestName("");
   }
 

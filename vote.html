@@ -24,6 +24,7 @@ function App() {
   const { myId } = useIdentity();
   const { roster } = useRoster();
   const [schedule, setSchedule] = React.useState([]);
+  const [checkinlog, setCheckinlog] = React.useState([]);
   const [dailyvotesDoc, setDailyvotesDoc] = React.useState({});
   const today = todayStr();
 
@@ -36,6 +37,14 @@ function App() {
   }, []);
 
   React.useEffect(() => {
+    const unsub = REFS.checkinlog.onSnapshot((snap) => {
+      const data = snap.data();
+      setCheckinlog(data && data.items ? data.items : []);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
     const unsub = REFS.dailyvotes.onSnapshot((snap) => {
       const data = snap.data();
       setDailyvotesDoc(data && data.data ? data.data : {});
@@ -43,10 +52,9 @@ function App() {
     return () => unsub();
   }, []);
 
-  // 투표는 "오늘 진짜 있었던 모임"에만 해당돼요 — 아직 열리지 않은 다음 모임 참석 예정자는 투표 대상이 아니에요.
-  const attendanceEvents = schedule.filter((s) => s.date === today);
-  const attendingTodayRaw = todayScheduleAttendees(attendanceEvents);
-  const attendingToday = attendingTodayRaw.map((a) => roster.find((m) => m.id === a.id) || a);
+  // 투표는 "오늘 진짜 있었던 모임"에만 해당돼요. 일정에서 참석 체크한 사람 + 관리자가 매칭 페이지에서
+  // 직접 체크인시킨 사람까지 합쳐서 판단해요 (체크인 경로가 두 가지라서 하나만 보면 놓칠 수 있어요).
+  const attendingToday = combinedTodayAttendees(schedule, checkinlog, roster);
   const iAttendedToday = !!(myId && attendingToday.some((m) => m.id === myId));
   const candidates = attendingToday.filter((m) => m.id !== myId);
 

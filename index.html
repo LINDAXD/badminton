@@ -33,19 +33,34 @@ function quoteOfToday() {
 }
 
 function MyBirthdayField({ me, onSave }) {
-  const [val, setVal] = React.useState((me && me.birthday) || "");
+  const [val, setVal] = React.useState(() => birthdayToInputVal(me));
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => {
-    setVal((me && me.birthday) || "");
+    setVal(birthdayToInputVal(me));
   }, [me && me.id]);
 
+  // 연도(birthYear)까지 저장돼 있으면 6자리로 미리 채워주고, 옛날에 4자리로만 등록했던 경우엔 다시 6자리로 입력받아요.
+  function birthdayToInputVal(m) {
+    if (m && m.birthYear && m.birthday && m.birthday.length === 4) {
+      return `${String(m.birthYear).slice(2, 4)}${m.birthday}`;
+    }
+    return "";
+  }
+
   function save() {
-    const digits = val.replace(/\D/g, "").slice(0, 4);
-    if (digits.length !== 4) { setMsg("숫자 4자리로 입력해주세요 (예: 0805)"); return; }
-    const mm = parseInt(digits.slice(0, 2), 10);
-    const dd = parseInt(digits.slice(2, 4), 10);
+    const digits = val.replace(/\D/g, "");
+    if (digits.length !== 6) {
+      setMsg("생년월일 6자리로 입력해주세요 (예: 980420)");
+      return;
+    }
+    const mmdd = digits.slice(2, 6); // YYMMDD → 뒤 4자리(MMDD)는 저장, 앞 2자리(YY)는 연도로 변환해서 따로 저장
+    const yy = parseInt(digits.slice(0, 2), 10);
+    const nowYY = new Date().getFullYear() % 100;
+    const birthYear = yy > nowYY ? 1900 + yy : 2000 + yy;
+    const mm = parseInt(mmdd.slice(0, 2), 10);
+    const dd = parseInt(mmdd.slice(2, 4), 10);
     if (mm < 1 || mm > 12 || dd < 1 || dd > 31) { setMsg("월/일을 다시 확인해주세요."); return; }
-    onSave(digits);
+    onSave(mmdd, birthYear);
     setVal(digits);
     setMsg("생일이 등록됐어요! 🎂");
     setTimeout(() => setMsg(""), 2500);
@@ -59,9 +74,9 @@ function MyBirthdayField({ me, onSave }) {
           type="tel"
           inputMode="numeric"
           value={val}
-          onChange={(e) => { setVal(e.target.value.replace(/\D/g, "").slice(0, 4)); if (msg) setMsg(""); }}
-          placeholder="0805"
-          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 w-16 focus:outline-none focus:ring-2 focus:ring-green-500"
+          onChange={(e) => { setVal(e.target.value.replace(/\D/g, "").slice(0, 6)); if (msg) setMsg(""); }}
+          placeholder="980420"
+          className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 w-20 focus:outline-none focus:ring-2 focus:ring-green-500"
         />
         <button onClick={save} className="text-[11px] text-white rounded-lg px-3 py-1.5 shrink-0" style={{ backgroundColor: "#4CAF50" }}>
           저장
@@ -70,6 +85,7 @@ function MyBirthdayField({ me, onSave }) {
           <span className="text-[11px] text-stone-400">현재 {fmtBirthday(me.birthday)}로 등록됨</span>
         )}
       </div>
+      <p className="text-[11px] text-stone-300 mt-1">생년월일 6자리로 입력해주세요 (예: 980420). 연도는 관리자만 볼 수 있어요.</p>
       {msg && <p className="text-[11px] mt-1" style={{ color: msg.includes("등록됐") ? "#4CAF50" : "#dc2626" }}>{msg}</p>}
     </div>
   );
@@ -284,8 +300,8 @@ function App() {
 
   const me = roster.find((m) => m.id === myId);
 
-  function updateMyBirthday(birthday) {
-    const next = roster.map((m) => (m.id === myId ? { ...m, birthday } : m));
+  function updateMyBirthday(birthday, birthYear) {
+    const next = roster.map((m) => (m.id === myId ? { ...m, birthday, ...(birthYear ? { birthYear } : {}) } : m));
     REFS.roster.set({ members: next }).catch(() => {});
   }
 
@@ -318,7 +334,7 @@ function App() {
     .slice(0, 3);
   const nextMeeting = upcomingList[0];
   const attendanceSource = getEffectiveAttendanceEvents(schedule);
-  const attendingMembers = todayScheduleAttendees(attendanceSource).map((a) => roster.find((m) => m.id === a.id) || a);
+  const attendingMembers = combinedTodayAttendees(schedule, checkinlog, roster).map((a) => roster.find((m) => m.id === a.id) || a);
   const attendCount = attendingMembers.length;
   const isRealToday = attendanceSource.length > 0 && attendanceSource[0].date === todayStr();
   // "출석"(오늘 진짜 체크인)이랑 "참석 예정"(다음 모임에 미리 참석 눌러둔 것)은 서로 다른 개념이라 구분해서 보여줘요.
