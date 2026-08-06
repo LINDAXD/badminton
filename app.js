@@ -366,7 +366,7 @@ const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 window.WEEKDAYS = WEEKDAYS;
 
 // ---------- 회원 프로필 카드 (클릭하면 열리는 모달) ----------
-function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems, kindvotes, matchhistory, dailyvotes, noshows, canEdit, isAdmin, onSave, onClose, onGiveNoShow }) {
+function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems, kindvotes, matchhistory, dailyvotes, noshows, canEdit, isAdmin, isSelf, onSave, onClose, onGiveNoShow }) {
   const [edit, setEdit] = useState(false);
   const [bio, setBio] = useState(member.bio || "");
   const [career, setCareer] = useState(member.career || "");
@@ -492,10 +492,16 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
             <div className="bg-stone-50 rounded-xl p-3">
               <p className="text-[11px] text-stone-400">생일</p>
               <p className="text-sm font-semibold text-stone-800">
-                {member.birthday ? fmtBirthday(member.birthday) : "-"}
-                {isAdmin && member.birthYear && (
-                  <span className="text-stone-400 font-normal"> · {computeAge(member.birthYear, member.birthday)}세</span>
-                )}
+                {!(isAdmin || isSelf) ? (
+                  <span className="text-stone-300 font-normal text-xs">비공개 (당일에만 축하 알림이 떠요)</span>
+                ) : member.birthday ? (
+                  <>
+                    {fmtBirthday(member.birthday)}
+                    {isAdmin && member.birthYear && (
+                      <span className="text-stone-400 font-normal"> · {computeAge(member.birthYear, member.birthday)}세</span>
+                    )}
+                  </>
+                ) : "-"}
               </p>
             </div>
             <div className="bg-stone-50 rounded-xl p-3">

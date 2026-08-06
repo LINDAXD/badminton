@@ -366,6 +366,7 @@ function App() {
           onGiveNoShow={giveNoShow}
           canEdit={adminOn || profileMember.id === myId}
           isAdmin={adminOn}
+          isSelf={profileMember.id === myId}
           onSave={saveProfileFields}
           onClose={() => setProfileMember(null)}
         />
