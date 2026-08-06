@@ -125,6 +125,7 @@ function App() {
   }
 
   function addMembers() {
+    if (!adminOn) return;
     const names = bulkText
       .split("\n")
       .map((n) => n.trim())
@@ -325,7 +326,8 @@ function App() {
         )}
       </section>
 
-      {/* add members */}
+      {/* add members (관리자 전용) */}
+      {adminOn && (
       <section className="px-5 max-w-2xl mx-auto mb-8">
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
           <p className="text-sm font-semibold mb-1">➕ 회원 추가</p>
@@ -346,6 +348,7 @@ function App() {
           {addMsg && <p className="text-xs mt-1.5" style={{ color: "#4CAF50" }}>{addMsg}</p>}
         </div>
       </section>
+      )}
 
       <BottomNav active="members" />
       <AppModalHost />

@@ -356,6 +356,9 @@ const SOCIAL_TAGS = [
   { key: "photo", emoji: "📸", label: "사진 촬영 가능" },
   { key: "sportsOnly", emoji: "🏸", label: "운동만 참여" },
   { key: "social", emoji: "😊", label: "운동 외 활동 가능" },
+  { key: "weekendOnly", emoji: "📅", label: "주말만 가능" },
+  { key: "weekdayOnly", emoji: "💼", label: "평일만 가능" },
+  { key: "anyDay", emoji: "🗓️", label: "평일·주말 상관없음" },
 ];
 window.SOCIAL_TAGS = SOCIAL_TAGS;
 
