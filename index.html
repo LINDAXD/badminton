@@ -252,18 +252,20 @@ function App() {
     appAlert("비밀번호가 변경됐어요.");
   }
 
-  const attendingMembers = todayScheduleAttendees(schedule).map((a) => roster.find((m) => m.id === a.id) || a);
-  const attendCount = attendingMembers.length;
-  const latestPhoto = reviews.find((r) => photosOf(r).length >= 3);
-  function isFirstTimer(id) {
-    return checkinlog.filter((c) => c.memberId === id).length <= 1;
-  }
   const pinned = notices.find((n) => n.pinned);
   const preview = pinned || notices[0];
   const upcomingList = [...schedule]
     .filter((s) => s.date >= todayStr())
     .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))
     .slice(0, 3);
+  const nextMeeting = upcomingList[0];
+  const attendanceSource = getEffectiveAttendanceEvents(schedule);
+  const attendingMembers = todayScheduleAttendees(attendanceSource).map((a) => roster.find((m) => m.id === a.id) || a);
+  const attendCount = attendingMembers.length;
+  const latestPhoto = reviews.find((r) => photosOf(r).length >= 3);
+  function isFirstTimer(id) {
+    return checkinlog.filter((c) => c.memberId === id).length <= 1;
+  }
   const birthdayMembers = roster.filter((m) => m.birthday && m.birthday === todayMD());
   const newMembersToday = roster.filter((m) => m.joinedAt === todayStr());
 

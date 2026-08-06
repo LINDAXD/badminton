@@ -528,7 +528,7 @@ function App() {
     if (!roster.length) return;
     setPlayers((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
-      const todayAttendees = todayScheduleAttendees(schedule);
+      const todayAttendees = todayScheduleAttendees(getEffectiveAttendanceEvents(schedule));
       const toAdd = todayAttendees.filter((a) => !existingIds.has(a.id)).map((a) => roster.find((m) => m.id === a.id) || a);
       if (!toAdd.length) return prev;
       return [

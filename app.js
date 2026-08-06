@@ -154,11 +154,23 @@ function isAttendingToday(memberId, rsvp, checkinlog) {
 
 // 오늘 날짜로 등록된 일정(들)에 실제로 "✅참석"을 누른 사람만 모아요 (진짜 정확한 오늘 참석자 목록).
 // 정원이 있으면 정원 안에 든 사람까지만 "참석"으로 쳐요 (대기자는 제외).
-function todayScheduleAttendees(scheduleItems) {
+// 오늘 날짜와 정확히 일치하는 일정이 있으면 그 참석자를, 없으면(아직 모임 당일이 아니면)
+// 홈 화면에 "다가오는 모임"으로 뜨는 제일 가까운 다음 일정의 참석자를 보여줘요.
+// 이렇게 해야 화면 여기저기(홈/더보기/매칭)에서 보여주는 "참석 인원"이 서로 안 어긋나요.
+function getEffectiveAttendanceEvents(scheduleItems) {
   const today = todayStr();
+  const exact = (scheduleItems || []).filter((s) => s.date === today);
+  if (exact.length > 0) return exact;
+  const upcoming = [...(scheduleItems || [])]
+    .filter((s) => s.date >= today)
+    .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+  return upcoming.length > 0 ? [upcoming[0]] : [];
+}
+
+// 주어진 일정(들)에 실제로 "✅참석"을 누른 사람만 모아요 (정원 있으면 정원 안에 든 사람까지만).
+function todayScheduleAttendees(scheduleItems) {
   const seen = new Map();
   (scheduleItems || []).forEach((s) => {
-    if (s.date !== today) return;
     const rsvpList = s.rsvp || [];
     const inList = rsvpList.filter((r) => r.status === "in").sort((a, b) => a.at - b.at);
     const confirmed = s.capacity ? inList.slice(0, s.capacity) : inList;
