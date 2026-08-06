@@ -50,7 +50,7 @@ function MyBirthdayField({ me, onSave }) {
   function save() {
     const digits = val.replace(/\D/g, "");
     if (digits.length !== 6) {
-      setMsg("생년월일 6자리로 입력해주세요 (예: 980420)");
+      setMsg("생년월일 6자리로 입력해주세요 (예: 000000)");
       return;
     }
     const mmdd = digits.slice(2, 6); // YYMMDD → 뒤 4자리(MMDD)는 저장, 앞 2자리(YY)는 연도로 변환해서 따로 저장
@@ -75,7 +75,7 @@ function MyBirthdayField({ me, onSave }) {
           inputMode="numeric"
           value={val}
           onChange={(e) => { setVal(e.target.value.replace(/\D/g, "").slice(0, 6)); if (msg) setMsg(""); }}
-          placeholder="980420"
+          placeholder="000000"
           className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 w-20 focus:outline-none focus:ring-2 focus:ring-green-500"
         />
         <button onClick={save} className="text-[11px] text-white rounded-lg px-3 py-1.5 shrink-0" style={{ backgroundColor: "#4CAF50" }}>
@@ -85,7 +85,7 @@ function MyBirthdayField({ me, onSave }) {
           <span className="text-[11px] text-stone-400">현재 {fmtBirthday(me.birthday)}로 등록됨</span>
         )}
       </div>
-      <p className="text-[11px] text-stone-300 mt-1">생년월일 6자리로 입력해주세요 (예: 980420). 연도는 관리자만 볼 수 있어요.</p>
+      <p className="text-[11px] text-stone-300 mt-1">생년월일 6자리로 입력해주세요 (예: 000000). 연도는 관리자만 볼 수 있어요.</p>
       {msg && <p className="text-[11px] mt-1" style={{ color: msg.includes("등록됐") ? "#4CAF50" : "#dc2626" }}>{msg}</p>}
     </div>
   );
