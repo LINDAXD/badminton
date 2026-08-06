@@ -263,7 +263,7 @@ function App() {
     const existing = roster.find((m) => m.name === name);
     if (existing) {
       if (existing.pin) {
-        const pin = await appPrompt(`${name}님, 본인 확인을 위해 비밀번호(숫자 4자리)를 입력해주세요.`);
+        const pin = await appPrompt(`${name}님, 본인 확인을 위해 비밀번호(숫자 4자리)를 입력해주세요.`, "", { password: true });
         if (pin === null) return;
         if (pin !== existing.pin) {
           setLoginMsg("비밀번호가 일치하지 않아요. 본인이 아니라면 입장할 수 없어요.");
@@ -272,7 +272,7 @@ function App() {
         login(existing.id, existing.name);
         setShowLoginModal(false);
       } else {
-        const pin = await appPrompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
+        const pin = await appPrompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`, "", { password: true });
         if (pin === null) return;
         if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
         const next = roster.map((m) => (m.id === existing.id ? { ...m, pin } : m));
@@ -288,7 +288,7 @@ function App() {
         setLoginInput("");
         return;
       }
-      const pin = await appPrompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
+      const pin = await appPrompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`, "", { password: true });
       if (pin === null) return;
       if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
       const req = { id: uid(), name, pin, level: signupLevel, requestedAt: todayStr() };
@@ -312,13 +312,13 @@ function App() {
 
   async function changeMyPin() {
     if (!me) return;
-    const current = await appPrompt("현재 비밀번호를 입력해주세요.");
+    const current = await appPrompt("현재 비밀번호를 입력해주세요.", "", { password: true });
     if (current === null) return;
     if (current !== (me.pin || "")) {
       appAlert("현재 비밀번호가 일치하지 않아요.");
       return;
     }
-    const next1 = await appPrompt("새 비밀번호를 입력해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)");
+    const next1 = await appPrompt("새 비밀번호를 입력해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)", "", { password: true });
     if (next1 === null) return;
     if (!/^\d{4}$/.test(next1)) { appAlert("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
     const next = roster.map((m) => (m.id === myId ? { ...m, pin: next1 } : m));

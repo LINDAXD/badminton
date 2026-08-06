@@ -72,6 +72,8 @@ function AppModalHost() {
         {modal.type === "prompt" && (
           <input
             autoFocus
+            type={modal.password ? "password" : "text"}
+            inputMode={modal.password ? "numeric" : "text"}
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && close(inputVal)}
@@ -100,9 +102,9 @@ function AppModalHost() {
   );
 }
 
-function appPrompt(message, defaultValue) {
+function appPrompt(message, defaultValue, opts) {
   return new Promise((resolve) => {
-    if (_appModalSetter) _appModalSetter({ type: "prompt", message, defaultValue: defaultValue || "", resolve });
+    if (_appModalSetter) _appModalSetter({ type: "prompt", message, defaultValue: defaultValue || "", password: !!(opts && opts.password), resolve });
     else resolve(window.prompt(message, defaultValue));
   });
 }
@@ -698,7 +700,7 @@ function useAdmin(isOfficer) {
   const adminOn = pinOn || !!isOfficer;
   async function tryUnlock(cb) {
     if (adminOn) { if (cb) cb(); return; }
-    const pin = await appPrompt("관리자 비밀번호를 입력하세요");
+    const pin = await appPrompt("관리자 비밀번호를 입력하세요", "", { password: true });
     if (pin === window.ADMIN_PIN) {
       localStorage.setItem("bm_admin", "1");
       setPinOn(true);
