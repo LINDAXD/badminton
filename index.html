@@ -185,13 +185,13 @@ function App() {
     return () => unsub();
   }, []);
 
-  function doLogin() {
+  async function doLogin() {
     const name = loginInput.trim();
     if (!name) { setLoginMsg("이름을 입력해주세요."); return; }
     const existing = roster.find((m) => m.name === name);
     if (existing) {
       if (existing.pin) {
-        const pin = window.prompt(`${name}님, 본인 확인을 위해 비밀번호(숫자 4자리)를 입력해주세요.`);
+        const pin = await appPrompt(`${name}님, 본인 확인을 위해 비밀번호(숫자 4자리)를 입력해주세요.`);
         if (pin === null) return;
         if (pin !== existing.pin) {
           setLoginMsg("비밀번호가 일치하지 않아요. 본인이 아니라면 입장할 수 없어요.");
@@ -199,7 +199,7 @@ function App() {
         }
         login(existing.id, existing.name);
       } else {
-        const pin = window.prompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
+        const pin = await appPrompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
         if (pin === null) return;
         if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
         const next = roster.map((m) => (m.id === existing.id ? { ...m, pin } : m));
@@ -214,7 +214,7 @@ function App() {
         setLoginInput("");
         return;
       }
-      const pin = window.prompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
+      const pin = await appPrompt(`${name}님, 처음 오셨네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
       if (pin === null) return;
       if (!/^\d{4}$/.test(pin)) { setLoginMsg("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
       const req = { id: uid(), name, pin, level: signupLevel, requestedAt: todayStr() };
@@ -236,24 +236,24 @@ function App() {
     REFS.roster.set({ members: next }).catch(() => {});
   }
 
-  function changeMyPin() {
+  async function changeMyPin() {
     if (!me) return;
-    const current = window.prompt("현재 비밀번호를 입력해주세요.");
+    const current = await appPrompt("현재 비밀번호를 입력해주세요.");
     if (current === null) return;
     if (current !== (me.pin || "")) {
-      window.alert("현재 비밀번호가 일치하지 않아요.");
+      appAlert("현재 비밀번호가 일치하지 않아요.");
       return;
     }
-    const next1 = window.prompt("새 비밀번호를 입력해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)");
+    const next1 = await appPrompt("새 비밀번호를 입력해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)");
     if (next1 === null) return;
-    if (!/^\d{4}$/.test(next1)) { window.alert("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
+    if (!/^\d{4}$/.test(next1)) { appAlert("비밀번호는 숫자 4자리로만 설정할 수 있어요. 더 길거나 짧으면 안 돼요."); return; }
     const next = roster.map((m) => (m.id === myId ? { ...m, pin: next1 } : m));
     REFS.roster.set({ members: next }).catch(() => {});
-    window.alert("비밀번호가 변경됐어요.");
+    appAlert("비밀번호가 변경됐어요.");
   }
 
-  const attendCount = Object.values(rsvp).filter((v) => v === "in").length;
-  const attendingMembers = roster.filter((m) => rsvp[m.id] === "in");
+  const attendingMembers = roster.filter((m) => isAttendingToday(m.id, rsvp, checkinlog));
+  const attendCount = attendingMembers.length;
   const latestPhoto = reviews.find((r) => photosOf(r).length >= 3);
   function isFirstTimer(id) {
     return checkinlog.filter((c) => c.memberId === id).length <= 1;
@@ -305,7 +305,7 @@ function App() {
         );
       })()}
 
-      {myId && rsvp[myId] === "in" && (
+      {myId && isAttendingToday(myId, rsvp, checkinlog) && (
         <section className="px-5 pt-2 max-w-2xl mx-auto text-center">
           <a href="./vote.html" className="text-xs text-stone-400 underline underline-offset-2">🗳️ 오늘 함께한 사람에게 투표하기</a>
         </section>
@@ -342,14 +342,14 @@ function App() {
             🎲 랜덤매칭
           </a>
         </div>
-        {rsvp[myId] === "in" && (
+        {isAttendingToday(myId, rsvp, checkinlog) && (
           <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>✅ 오늘 참석으로 체크되어 있어요</p>
         )}
         {checkedInMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{checkedInMsg}</p>}
       </section>
 
       {/* venue rental fee (대관비) */}
-      {myId && paymentInfo && rsvp[myId] === "in" && (
+      {myId && paymentInfo && isAttendingToday(myId, rsvp, checkinlog) && (
         <section className="px-5 max-w-2xl mx-auto mb-5">
           <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
             <p className="text-sm font-bold text-stone-800 mb-1">💰 오늘 대관비</p>
@@ -536,6 +536,7 @@ function App() {
       </section>
 
       <BottomNav active="home" />
+      <AppModalHost />
     </div>
   );
 }

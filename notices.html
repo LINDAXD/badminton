@@ -161,7 +161,7 @@ function App() {
       }
     } catch (e) {
       console.error(e);
-      window.alert(`사진 업로드에 실패했어요. (${e.message || "알 수 없는 오류"})\n텍스트만 등록할게요.`);
+      appAlert(`사진 업로드에 실패했어요. (${e.message || "알 수 없는 오류"})\n텍스트만 등록할게요.`);
     }
     const item = { id: uid(), title: title.trim(), body: body.trim(), date: todayStr(), pinned, photoUrl, likes: [], comments: [] };
     const next = pinned ? [item, ...notices] : [...notices, item];
@@ -171,13 +171,13 @@ function App() {
     setTitle(""); setBody(""); setPinned(false); setFile(null); setUploading(false); setShowForm(false);
   }
 
-  function removeNotice(id) {
-    if (!window.confirm("이 공지를 삭제할까요?")) return;
+  async function removeNotice(id) {
+    if (!(await appConfirm("이 공지를 삭제할까요?"))) return;
     REFS.notices.set({ items: notices.filter((n) => n.id !== id) }).catch(() => {});
   }
 
-  function deletePhoto(id, url) {
-    if (!window.confirm("사진만 삭제할까요?")) return;
+  async function deletePhoto(id, url) {
+    if (!(await appConfirm("사진만 삭제할까요?"))) return;
     // Cloudinary는 브라우저에서 직접 삭제할 수 없어(서버 서명 필요), 목록에서만 제거해요.
     REFS.notices.set({ items: notices.map((n) => n.id === id ? { ...n, photoUrl: "" } : n) }).catch(() => {});
   }
@@ -235,6 +235,7 @@ function App() {
       </section>
 
       <BottomNav active="notices" />
+      <AppModalHost />
     </div>
   );
 }

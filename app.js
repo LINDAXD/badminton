@@ -26,6 +26,85 @@ function fmtBirthday(b) {
   return `${b.slice(0, 2)}월 ${b.slice(2, 4)}일`;
 }
 
+// ---------- 앱 내장 팝업 (브라우저 기본 prompt/confirm/alert 대체) ----------
+// 브라우저 기본 팝업은 위에 사이트 주소가 무조건 뜨는데(보안상 못 없앰), 이 컴포넌트는 그냥 화면 안의
+// 일반 UI라서 주소가 전혀 안 보여요. 각 페이지의 App()에서 <AppModalHost /> 한 번만 렌더링하면 돼요.
+let _appModalSetter = null;
+
+function AppModalHost() {
+  const [modal, setModal] = useState(null);
+  const [inputVal, setInputVal] = useState("");
+
+  useEffect(() => {
+    _appModalSetter = (m) => {
+      setModal(m);
+      setInputVal((m && m.defaultValue) || "");
+    };
+    return () => { _appModalSetter = null; };
+  }, []);
+
+  if (!modal) return null;
+
+  function close(result) {
+    const resolve = modal.resolve;
+    setModal(null);
+    resolve(result);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center px-6" onClick={() => modal.type !== "alert" && close(modal.type === "confirm" ? false : null)}>
+      <div className="bg-white rounded-2xl p-5 w-full max-w-xs rise-in" onClick={(e) => e.stopPropagation()}>
+        <p className="text-sm text-stone-800 whitespace-pre-wrap mb-3">{modal.message}</p>
+        {modal.type === "prompt" && (
+          <input
+            autoFocus
+            value={inputVal}
+            onChange={(e) => setInputVal(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && close(inputVal)}
+            className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        )}
+        <div className="flex gap-2">
+          {modal.type !== "alert" && (
+            <button
+              onClick={() => close(modal.type === "confirm" ? false : null)}
+              className="flex-1 rounded-lg py-2 text-sm font-semibold border border-stone-200 text-stone-500"
+            >
+              취소
+            </button>
+          )}
+          <button
+            onClick={() => close(modal.type === "confirm" ? true : modal.type === "prompt" ? inputVal : true)}
+            className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+            style={{ backgroundColor: "#4CAF50" }}
+          >
+            확인
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function appPrompt(message, defaultValue) {
+  return new Promise((resolve) => {
+    if (_appModalSetter) _appModalSetter({ type: "prompt", message, defaultValue: defaultValue || "", resolve });
+    else resolve(window.prompt(message, defaultValue));
+  });
+}
+function appConfirm(message) {
+  return new Promise((resolve) => {
+    if (_appModalSetter) _appModalSetter({ type: "confirm", message, resolve });
+    else resolve(window.confirm(message));
+  });
+}
+function appAlert(message) {
+  return new Promise((resolve) => {
+    if (_appModalSetter) _appModalSetter({ type: "alert", message, resolve: () => resolve() });
+    else { window.alert(message); resolve(); }
+  });
+}
+
 function fmtMoney(n) {
   const num = Number(n);
   if (isNaN(num)) return "";
@@ -65,6 +144,14 @@ window.BADGE_DEFS = [
 
 // checkinlog(항목: {memberId, date})를 바탕으로 한 회원의 출석 통계를 계산해요.
 // allSessionDates: 클럽 전체에서 실제로 모임이 있었던 날짜 목록(=checkinlog에 등장하는 모든 날짜, 중복 제거)
+// "오늘 참석"인지 판단 — rsvp 플래그는 한번 켜지면 계속 남아있는 값이라(자동으로 안 꺼짐),
+// checkinlog에 "오늘 날짜"로 실제 기록이 있는지까지 같이 확인해야 진짜 오늘 참석자만 걸러져요.
+function isAttendingToday(memberId, rsvp, checkinlog) {
+  if (!rsvp || rsvp[memberId] !== "in") return false;
+  const today = todayStr();
+  return (checkinlog || []).some((c) => c.memberId === memberId && c.date === today);
+}
+
 function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
   const myDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
   const totalCount = myDates.size;

@@ -37,8 +37,8 @@ function App() {
     return () => unsub();
   }, []);
 
-  function giveNoShow(member) {
-    if (!window.confirm(`"${member.name}"님에게 노쇼 1회를 부여할까요?`)) return;
+  async function giveNoShow(member) {
+    if (!(await appConfirm(`"${member.name}"님에게 노쇼 1회를 부여할까요?`))) return;
     const item = { id: uid(), memberId: member.id, date: todayStr(), source: "admin" };
     REFS.noshows.set({ items: [...noshows, item] }).catch(() => {});
   }
@@ -117,8 +117,8 @@ function App() {
     REFS.pending.set({ items: next }).catch(() => {});
   }
 
-  function rejectRequest(req) {
-    if (!window.confirm(`"${req.name}" 가입 신청을 거절할까요?`)) return;
+  async function rejectRequest(req) {
+    if (!(await appConfirm(`"${req.name}" 가입 신청을 거절할까요?`))) return;
     const next = pending.filter((p) => p.id !== req.id);
     setPending(next);
     REFS.pending.set({ items: next }).catch(() => {});
@@ -165,8 +165,8 @@ function App() {
     setRevealedPins((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
-  function removeMember(id, name) {
-    if (!window.confirm(`"${name}" 회원을 명단에서 삭제할까요? 이 작업은 되돌릴 수 없어요.`)) return;
+  async function removeMember(id, name) {
+    if (!(await appConfirm(`"${name}" 회원을 명단에서 삭제할까요? 이 작업은 되돌릴 수 없어요.`))) return;
     persist(roster.filter((m) => m.id !== id));
   }
 
@@ -348,6 +348,7 @@ function App() {
       </section>
 
       <BottomNav active="members" />
+      <AppModalHost />
 
       {profileMember && (
         <MemberProfileModal

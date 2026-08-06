@@ -265,14 +265,14 @@ function App() {
     localStorage.removeItem("bm_myId");
     setMyId(null);
   }
-  function tryAdminUnlock() {
+  async function tryAdminUnlock() {
     if (adminOn) return;
-    const pin = window.prompt("관리자 비밀번호를 입력하세요");
+    const pin = await appPrompt("관리자 비밀번호를 입력하세요");
     if (pin === ADMIN_PIN) {
       localStorage.setItem("bm_admin", "1");
       setPinOn(true);
     } else if (pin !== null) {
-      window.alert("비밀번호가 틀렸어요.");
+      appAlert("비밀번호가 틀렸어요.");
     }
   }
   function adminLock() {
@@ -385,7 +385,7 @@ function App() {
     if (!m || !myId) return;
     const allIds = [...m.teamA, ...m.teamB].map((p) => p.id);
     if (!allIds.includes(myId)) {
-      window.alert("이 경기에 참여한 사람만 투표할 수 있어요.");
+      appAlert("이 경기에 참여한 사람만 투표할 수 있어요.");
       return;
     }
     const already = kindVotes.some((v) => v.matchId === m.id && v.voterId === myId);
@@ -489,16 +489,16 @@ function App() {
   const tierBadge = { 상: { emoji: "🔥", color: "text-red-500" }, 중: { emoji: "➖", color: "text-stone-400" }, 하: { emoji: "🌱", color: "text-green-600" } };
 
   // 관리자가 개인 전적을 직접 원하는 값으로 고쳐요 (실제 경기기록은 그대로 두고, 보정값만 얹어요)
-  function correctPlayerStats(p) {
+  async function correctPlayerStats(p) {
     const current = lifetimeStatsFor(p.id);
-    const winInput = window.prompt(`${p.name}님의 정확한 승 수를 입력해주세요`, String(current.wins));
+    const winInput = await appPrompt(`${p.name}님의 정확한 승 수를 입력해주세요`, String(current.wins));
     if (winInput === null) return;
-    const lossInput = window.prompt(`${p.name}님의 정확한 패 수를 입력해주세요`, String(current.losses));
+    const lossInput = await appPrompt(`${p.name}님의 정확한 패 수를 입력해주세요`, String(current.losses));
     if (lossInput === null) return;
     const newWins = parseInt(winInput, 10);
     const newLosses = parseInt(lossInput, 10);
     if (isNaN(newWins) || isNaN(newLosses) || newWins < 0 || newLosses < 0) {
-      window.alert("숫자를 정확히 입력해주세요.");
+      appAlert("숫자를 정확히 입력해주세요.");
       return;
     }
     // 실제 경기기록 기준값과의 차이를 보정값으로 저장
@@ -521,7 +521,7 @@ function App() {
     if (!roster.length) return;
     setPlayers((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
-      const toAdd = roster.filter((m) => rsvp[m.id] === "in" && !existingIds.has(m.id));
+      const toAdd = roster.filter((m) => isAttendingToday(m.id, rsvp, checkinlog) && !existingIds.has(m.id));
       if (!toAdd.length) return prev;
       return [
         ...prev,
@@ -567,8 +567,8 @@ function App() {
     RESTWISH_REF.set({ data: {} }).catch(() => {});
   }
 
-  function resetCheckins() {
-    if (!window.confirm("모든 체크인 기록을 초기화할까요? (참석/불참 전부 지워지고, 참석자 명단도 비워져요)")) return;
+  async function resetCheckins() {
+    if (!(await appConfirm("모든 체크인 기록을 초기화할까요? (참석/불참 전부 지워지고, 참석자 명단도 비워져요)"))) return;
     setRsvp({});
     CHECKIN_REF.set({ data: {} }).catch(() => {});
     setPlayers([]);
@@ -702,11 +702,11 @@ function App() {
       return;
     }
     if (lockedCourts.includes(courtNum)) {
-      window.alert("이 코트는 잠겨있어요. 잠금을 풀고 다시 시도해주세요.");
+      appAlert("이 코트는 잠겨있어요. 잠금을 풀고 다시 시도해주세요.");
       return;
     }
     if (waitingPlayers.length < 4) {
-      window.alert("대기 중인 인원이 4명 미만이에요. 체크인/참석자를 확인해주세요.");
+      appAlert("대기 중인 인원이 4명 미만이에요. 체크인/참석자를 확인해주세요.");
       return;
     }
     const four = pickFourForCourt();
@@ -787,7 +787,7 @@ function App() {
     const shuffled = [...restPool].sort(() => Math.random() - 0.5);
     const need = 4 - chosen.length;
     if (shuffled.length < need) {
-      window.alert(`대기 인원이 부족해요. (${need}명 더 필요해요)`);
+      appAlert(`대기 인원이 부족해요. (${need}명 더 필요해요)`);
       return;
     }
     const four = [...chosen, ...shuffled.slice(0, need)];
@@ -1420,6 +1420,7 @@ function App() {
       )}
 
       <BottomNav active="match" />
+      <AppModalHost />
     </div>
     </RequireLogin>
   );

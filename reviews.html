@@ -150,7 +150,7 @@ function App() {
 
   function openForm() {
     if (!myId) {
-      window.alert("후기를 올리려면 먼저 홈에서 이름으로 입장해주세요.");
+      appAlert("후기를 올리려면 먼저 홈에서 이름으로 입장해주세요.");
       window.location.href = "./index.html#login";
       return;
     }
@@ -159,7 +159,7 @@ function App() {
 
   async function addReview() {
     if (!text.trim() && files.length === 0) {
-      window.alert("글이나 사진 중 하나는 넣어주세요.");
+      appAlert("글이나 사진 중 하나는 넣어주세요.");
       return;
     }
     setUploading(true);
@@ -171,7 +171,7 @@ function App() {
       }
     } catch (e) {
       console.error(e);
-      window.alert(`사진 업로드에 실패했어요. (${e.message || "알 수 없는 오류"})\n일부 사진만 등록될 수 있어요.`);
+      appAlert(`사진 업로드에 실패했어요. (${e.message || "알 수 없는 오류"})\n일부 사진만 등록될 수 있어요.`);
     }
     const item = {
       id: uid(),
@@ -186,8 +186,8 @@ function App() {
     setText(""); setFiles([]); setUploading(false); setShowForm(false);
   }
 
-  function removeReview(r) {
-    if (!window.confirm("이 후기를 삭제할까요?")) return;
+  async function removeReview(r) {
+    if (!(await appConfirm("이 후기를 삭제할까요?"))) return;
     // Cloudinary는 브라우저에서 직접 삭제할 수 없어(서버 서명 필요), 목록에서만 제거해요.
     REFS.reviews.set({ items: reviews.filter((it) => it.id !== r.id) }).catch(() => {});
   }
@@ -310,6 +310,7 @@ function App() {
       )}
 
       <BottomNav active="reviews" />
+      <AppModalHost />
     </div>
   );
 }
