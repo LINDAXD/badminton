@@ -55,11 +55,13 @@ const RESET_CATEGORIES = [
 ];
 
 function DataResetPanel() {
+  const { roster } = useRoster();
   const [checked, setChecked] = React.useState(() =>
     Object.fromEntries(RESET_CATEGORIES.map((c) => [c.key, c.key !== "roster"]))
   );
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
+  const [piiBusy, setPiiBusy] = React.useState(false);
 
   function toggle(key) {
     setChecked((c) => ({ ...c, [key]: !c[key] }));
@@ -99,6 +101,28 @@ function DataResetPanel() {
     }
   }
 
+  async function resetPersonalInfoOnly() {
+    if (!(await appConfirm(`이름/등급/레벨/가입일은 그대로 두고, 회원 ${roster.length}명의 개인정보만 지울까요?\n\n(비밀번호, 생일, 프로필 사진, 자기소개, 경력, 친목 태그가 지워져요)\n\n비밀번호가 지워지면 다음 로그인 때 새 비밀번호를 다시 설정해야 해요.`))) return;
+    setPiiBusy(true);
+    try {
+      const cleaned = roster.map((m) => ({
+        id: m.id,
+        name: m.name,
+        grade: m.grade,
+        level: m.level,
+        joinedAt: m.joinedAt,
+        manualBadges: m.manualBadges || {},
+      }));
+      await REFS.roster.set({ members: cleaned });
+      setMsg("회원 개인정보가 초기화됐어요! ✅");
+    } catch (e) {
+      setMsg("초기화 중 문제가 생겼어요. 다시 시도해주세요.");
+    } finally {
+      setPiiBusy(false);
+      setTimeout(() => setMsg(""), 4000);
+    }
+  }
+
   return (
     <div className="bg-white rounded-2xl p-4 border border-red-200">
       <p className="text-sm font-bold text-red-500 mb-1">🧹 테스트 데이터 초기화</p>
@@ -120,6 +144,19 @@ function DataResetPanel() {
         {busy ? "초기화 중..." : "선택한 항목 초기화"}
       </button>
       {msg && <p className="text-xs mt-2 text-center" style={{ color: msg.includes("됐어요") ? "#4CAF50" : "#dc2626" }}>{msg}</p>}
+
+      <div className="mt-4 pt-4 border-t border-stone-100">
+        <p className="text-xs font-bold text-stone-600 mb-1">🙋 회원 개인정보만 초기화</p>
+        <p className="text-[11px] text-stone-400 mb-2">이름/등급/레벨/가입일은 유지하고, 비밀번호·생일·프로필사진·자기소개·경력·친목태그만 지워요. (회원 자체는 안 지워져요)</p>
+        <button
+          onClick={resetPersonalInfoOnly}
+          disabled={piiBusy}
+          className="w-full rounded-lg py-2.5 text-sm font-semibold border disabled:opacity-60"
+          style={{ borderColor: "#dc2626", color: "#dc2626" }}
+        >
+          {piiBusy ? "초기화 중..." : "회원 개인정보만 초기화"}
+        </button>
+      </div>
     </div>
   );
 }
