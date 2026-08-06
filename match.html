@@ -220,7 +220,7 @@ function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onAutoFil
 }
 
 function App() {
-  const [tab, setTab] = useState("players");
+  const [tab, setTab] = useState("match");
   const [players, setPlayers] = useState([]);
   const [roster, setRoster] = useState([]);
   const [rosterReady, setRosterReady] = useState(false);
@@ -1013,26 +1013,31 @@ function App() {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-            <p className="text-sm font-semibold mb-2">사용할 코트 수</p>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setNumCourts((n) => Math.max(1, n - 1))}
-                className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
-              >
-                −
-              </button>
-              <span className="scorefont text-xl w-8 text-center">{numCourts}</span>
-              <button
-                onClick={() => setNumCourts((n) => n + 1)}
-                className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
-              >
-                +
-              </button>
-              <span className="text-xs text-stone-400">(최대 {maxCourts || 0}면 · 4명당 1코트)</span>
+          {adminOn ? (
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+              <p className="text-sm font-semibold mb-2">사용할 코트 수</p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setNumCourts((n) => Math.max(1, n - 1))}
+                  className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
+                >
+                  −
+                </button>
+                <span className="scorefont text-xl w-8 text-center">{numCourts}</span>
+                <button
+                  onClick={() => setNumCourts((n) => n + 1)}
+                  className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
+                >
+                  +
+                </button>
+                <span className="text-xs text-stone-400">(최대 {maxCourts || 0}면 · 4명당 1코트)</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-xs text-stone-400 text-center">코트 {numCourts}면 운영 중 · {matchMode === "skill" ? "🔥 실력전" : "⚖️ 균형"} 모드</p>
+          )}
 
+          {adminOn && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
             <p className="text-sm font-semibold mb-1">매칭 모드</p>
             <p className="text-[11px] text-stone-400 mb-2">
@@ -1055,6 +1060,7 @@ function App() {
               ))}
             </div>
           </div>
+          )}
 
           <div>
             <p className="text-sm font-semibold mb-2">오늘 참석자 ({players.length}명)</p>
