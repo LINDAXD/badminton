@@ -275,7 +275,7 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
                 <p className="text-lg font-bold text-stone-900">{member.name}</p>
                 <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                   <GradeBadge grade={member.grade} />
-                  {member.level && <span className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded-full px-2 py-0.5">{member.level}</span>}
+                  {member.level && <MiniTag>{member.level}</MiniTag>}
                 </div>
               </div>
             </div>
@@ -657,8 +657,17 @@ function TopHeader({ title, subtitle }) {
 function GradeBadge({ grade }) {
   const g = gradeInfo(grade);
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${g.color}`}>
-      {g.emoji} {g.key}
+    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${g.color}`}>
+      {g.emoji && <span>{g.emoji}</span>} {g.key}
+    </span>
+  );
+}
+
+// 레벨/실력등급/게스트 등 부가 정보용 — 항상 같은 옅은 회색 스타일로 통일
+function MiniTag({ children }) {
+  return (
+    <span className="inline-flex items-center text-[10px] text-stone-400 bg-stone-50 border border-stone-200 rounded-full px-2 py-0.5">
+      {children}
     </span>
   );
 }

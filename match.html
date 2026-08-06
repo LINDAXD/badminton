@@ -1121,14 +1121,14 @@ function App() {
                     className={`bg-white rounded-xl px-4 py-3 flex items-center justify-between border ${isExcluded ? "border-red-200 opacity-60" : "border-stone-200"}`}
                   >
                     <div>
-                      <p className="text-sm font-medium flex items-center gap-1">
-                        {p.name}
-                        {isFirstTimer(p.id) && <span className="text-xs">🌱</span>}
-                        {badge && <span className={`text-xs ${badge.color}`}>{badge.emoji} {tier}</span>}
-                        {showLevel && <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-full">{rosterMember.level}</span>}
-                        {isExcluded && <span className="text-[10px] text-red-400 bg-red-50 px-1.5 py-0.5 rounded-full">매칭 제외됨</span>}
-                      </p>
-                      <p className="text-xs text-stone-400 scorefont">
+                      <p className="text-sm font-semibold text-stone-800">{p.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        {isFirstTimer(p.id) && <MiniTag>🌱 첫참석</MiniTag>}
+                        {badge && <span className={`text-[10px] font-medium ${badge.color}`}>{badge.emoji} {tier}</span>}
+                        {showLevel && <MiniTag>{rosterMember.level}</MiniTag>}
+                        {isExcluded && <span className="text-[10px] text-red-400">매칭 제외됨</span>}
+                      </div>
+                      <p className="text-xs text-stone-400 scorefont mt-1">
                         오늘 {todayGamesPlayed(p.id)}경기 · 통산 {stats.wins}승 {stats.losses}패
                       </p>
                     </div>

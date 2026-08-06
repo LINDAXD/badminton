@@ -48,10 +48,10 @@ window.REFS = {
 
 // ---- 공통 상수 ----
 window.GRADES = [
-  { key: "운영진", emoji: "👑", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  { key: "MVP", emoji: "🏆", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  { key: "일반회원", emoji: "🏸", color: "bg-green-100 text-green-700 border-green-200" },
-  { key: "신입회원", emoji: "🌱", color: "bg-lime-100 text-lime-700 border-lime-200" },
+  { key: "운영진", emoji: "👑", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  { key: "MVP", emoji: "🏆", color: "bg-amber-50 text-amber-600 border-amber-200" },
+  { key: "일반회원", emoji: "", color: "bg-stone-50 text-stone-400 border-stone-200" },
+  { key: "신입회원", emoji: "🌱", color: "bg-stone-50 text-stone-400 border-stone-200" },
 ];
 
 window.LEVELS = ["왕초보", "초보", "D조", "C조", "B조"];
