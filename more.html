@@ -108,7 +108,8 @@ function App() {
   const king = roster.find((m) => m.id === kingId);
 
   // 오늘의 버디: 오늘 참석(in) 체크한 사람 중 날짜 시드로 1명 랜덤 선정 (모두에게 동일)
-  const todayAttendees = roster.filter((m) => isAttendingToday(m.id, rsvp, checkinlog));
+  const todayAttendeesRaw = todayScheduleAttendees(schedule);
+  const todayAttendees = todayAttendeesRaw.map((a) => roster.find((m) => m.id === a.id) || a);
   const seed = new Date().getDate();
   const buddy = todayAttendees.length ? todayAttendees[seed % todayAttendees.length] : null;
 

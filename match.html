@@ -249,6 +249,7 @@ function App() {
   const [lockedCourts, setLockedCourts] = useState([]);
   const [skillRankOffset, setSkillRankOffset] = useState(0);
   const [kindVotes, setKindVotes] = useState([]);
+  const [schedule, setSchedule] = useState([]);
   const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
   const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
   const ADMIN_PIN = window.ADMIN_PIN;
@@ -333,6 +334,11 @@ function App() {
       setKindVotes(data && data.items ? data.items : []);
     }, () => {});
 
+    const unsub10 = REFS.schedule.onSnapshot((snap) => {
+      const data = snap.data();
+      setSchedule(data && data.items ? data.items : []);
+    }, () => {});
+
     return () => {
       unsub1();
       unsub2();
@@ -343,6 +349,7 @@ function App() {
       unsub7();
       unsub8();
       unsub9();
+      unsub10();
     };
   }, []);
 
@@ -521,14 +528,15 @@ function App() {
     if (!roster.length) return;
     setPlayers((prev) => {
       const existingIds = new Set(prev.map((p) => p.id));
-      const toAdd = roster.filter((m) => isAttendingToday(m.id, rsvp, checkinlog) && !existingIds.has(m.id));
+      const todayAttendees = todayScheduleAttendees(schedule);
+      const toAdd = todayAttendees.filter((a) => !existingIds.has(a.id)).map((a) => roster.find((m) => m.id === a.id) || a);
       if (!toAdd.length) return prev;
       return [
         ...prev,
         ...toAdd.map((m) => ({ id: m.id, name: m.name, gamesPlayed: 0, wins: 0, losses: 0 })),
       ];
     });
-  }, [rsvp, roster]);
+  }, [rsvp, roster, schedule]);
 
   function persistRoster(next) {
     setRoster(next);

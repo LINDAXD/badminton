@@ -152,6 +152,21 @@ function isAttendingToday(memberId, rsvp, checkinlog) {
   return (checkinlog || []).some((c) => c.memberId === memberId && c.date === today);
 }
 
+// 오늘 날짜로 등록된 일정(들)에 실제로 "✅참석"을 누른 사람만 모아요 (진짜 정확한 오늘 참석자 목록).
+// 정원이 있으면 정원 안에 든 사람까지만 "참석"으로 쳐요 (대기자는 제외).
+function todayScheduleAttendees(scheduleItems) {
+  const today = todayStr();
+  const seen = new Map();
+  (scheduleItems || []).forEach((s) => {
+    if (s.date !== today) return;
+    const rsvpList = s.rsvp || [];
+    const inList = rsvpList.filter((r) => r.status === "in").sort((a, b) => a.at - b.at);
+    const confirmed = s.capacity ? inList.slice(0, s.capacity) : inList;
+    confirmed.forEach((r) => { if (!seen.has(r.id)) seen.set(r.id, { id: r.id, name: r.name }); });
+  });
+  return [...seen.values()];
+}
+
 function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
   const myDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
   const totalCount = myDates.size;

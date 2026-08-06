@@ -252,7 +252,7 @@ function App() {
     appAlert("비밀번호가 변경됐어요.");
   }
 
-  const attendingMembers = roster.filter((m) => isAttendingToday(m.id, rsvp, checkinlog));
+  const attendingMembers = todayScheduleAttendees(schedule).map((a) => roster.find((m) => m.id === a.id) || a);
   const attendCount = attendingMembers.length;
   const latestPhoto = reviews.find((r) => photosOf(r).length >= 3);
   function isFirstTimer(id) {
@@ -305,7 +305,7 @@ function App() {
         );
       })()}
 
-      {myId && isAttendingToday(myId, rsvp, checkinlog) && (
+      {myId && attendingMembers.some((m) => m.id === myId) && (
         <section className="px-5 pt-2 max-w-2xl mx-auto text-center">
           <a href="./vote.html" className="text-xs text-stone-400 underline underline-offset-2">🗳️ 오늘 함께한 사람에게 투표하기</a>
         </section>
@@ -342,14 +342,14 @@ function App() {
             🎲 랜덤매칭
           </a>
         </div>
-        {isAttendingToday(myId, rsvp, checkinlog) && (
+        {attendingMembers.some((m) => m.id === myId) && (
           <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>✅ 오늘 참석으로 체크되어 있어요</p>
         )}
         {checkedInMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{checkedInMsg}</p>}
       </section>
 
       {/* venue rental fee (대관비) */}
-      {myId && paymentInfo && isAttendingToday(myId, rsvp, checkinlog) && (
+      {myId && paymentInfo && attendingMembers.some((m) => m.id === myId) && (
         <section className="px-5 max-w-2xl mx-auto mb-5">
           <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
             <p className="text-sm font-bold text-stone-800 mb-1">💰 오늘 대관비</p>
