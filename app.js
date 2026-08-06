@@ -348,10 +348,14 @@ function monthlyLeader(dailyvotes, category, roster) {
 }
 
 const SOCIAL_TAGS = [
-  { key: "meal", emoji: "🍜", label: "운동 후 식사 가능" },
-  { key: "coffee", emoji: "☕", label: "운동 후 커피 가능" },
-  { key: "car", emoji: "🚗", label: "차량 보유" },
+  { key: "meal", emoji: "🍚", label: "식사 가능" },
+  { key: "coffee", emoji: "☕", label: "커피 가능" },
+  { key: "pickup", emoji: "🚗", label: "픽업 가능" },
   { key: "racket", emoji: "🏸", label: "라켓 대여 가능" },
+  { key: "beginnerCare", emoji: "🆕", label: "초보 케어 가능" },
+  { key: "photo", emoji: "📸", label: "사진 촬영 가능" },
+  { key: "sportsOnly", emoji: "🏸", label: "운동만 참여" },
+  { key: "social", emoji: "😊", label: "운동 외 활동 가능" },
 ];
 window.SOCIAL_TAGS = SOCIAL_TAGS;
 
