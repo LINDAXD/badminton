@@ -23,15 +23,15 @@
 function App() {
   const { myId } = useIdentity();
   const { roster } = useRoster();
-  const [rsvp, setRsvp] = React.useState({});
+  const [schedule, setSchedule] = React.useState([]);
   const [dailyvotesDoc, setDailyvotesDoc] = React.useState({});
   const today = todayStr();
 
   React.useEffect(() => {
-    const unsub = REFS.checkin.onSnapshot((snap) => {
+    const unsub = REFS.schedule.onSnapshot((snap) => {
       const data = snap.data();
-      setRsvp(data && data.data ? data.data : {});
-    });
+      setSchedule(data && data.items ? data.items : []);
+    }, () => {});
     return () => unsub();
   }, []);
 
@@ -43,13 +43,26 @@ function App() {
     return () => unsub();
   }, []);
 
-  const attendingToday = roster.filter((m) => rsvp[m.id] === "in");
-  const iAttendedToday = !!(myId && rsvp[myId] === "in");
+  const attendanceEvents = getEffectiveAttendanceEvents(schedule);
+  const attendingTodayRaw = todayScheduleAttendees(attendanceEvents);
+  const attendingToday = attendingTodayRaw.map((a) => roster.find((m) => m.id === a.id) || a);
+  const iAttendedToday = !!(myId && attendingToday.some((m) => m.id === myId));
   const candidates = attendingToday.filter((m) => m.id !== myId);
-  const myVotesToday = ((dailyvotesDoc[today] || {}));
+
+  // 이달의 신인상은 "최근 가입한 회원"만 후보로 나와요 (가입 30일 이내, 또는 이번 달 가입)
+  const thisMonth = today.slice(0, 7);
+  const newcomerCandidates = candidates.filter((m) => {
+    const full = roster.find((r) => r.id === m.id);
+    if (!full || !full.joinedAt) return false;
+    if (full.joinedAt.slice(0, 7) === thisMonth) return true;
+    const days = Math.floor((new Date() - new Date(full.joinedAt)) / 86400000);
+    return days <= 30;
+  });
+
+  const myVotesToday = dailyvotesDoc[today] || {};
 
   function hasVoted(category) {
-    const votes = (myVotesToday[category] || []);
+    const votes = myVotesToday[category] || [];
     return votes.some((v) => v.voterId === myId);
   }
 
@@ -57,60 +70,65 @@ function App() {
     if (!myId || !iAttendedToday) return;
     if (hasVoted(category)) return;
     const dayVotes = { ...(dailyvotesDoc[today] || {}) };
-    const catVotes = [...(dayVotes[category] || []), { voterId: myId, votedForId }];
+    const catVotes = [...(dayVotes[category] || []), { voterId: myId, votedForId: votedForId || null }];
     dayVotes[category] = catVotes;
     const next = { ...dailyvotesDoc, [today]: dayVotes };
     setDailyvotesDoc(next);
     REFS.dailyvotes.set({ data: next }).catch(() => {});
   }
 
+  function renderCategory(cat, candidateList) {
+    const voted = hasVoted(cat.key);
+    return (
+      <div key={cat.key} className="bg-white rounded-2xl p-4 border border-stone-200">
+        <p className="text-sm font-bold text-stone-800 mb-1">{cat.emoji} {cat.label}</p>
+        <p className="text-xs text-stone-400 mb-3">{cat.question}</p>
+        {voted ? (
+          <p className="text-xs font-semibold text-center py-2" style={{ color: "#4CAF50" }}>✅ 투표 완료! 다음 모임 때 또 투표할 수 있어요.</p>
+        ) : candidateList.length === 0 ? (
+          <p className="text-xs text-stone-400 text-center py-2">투표할 후보가 없어요.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {candidateList.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => castVote(cat.key, c.id)}
+                className="px-3 py-1.5 rounded-full text-xs border border-stone-200 bg-stone-50 text-stone-600 tap-scale"
+              >
+                {c.name}
+              </button>
+            ))}
+            <button
+              onClick={() => castVote(cat.key, null)}
+              className="px-3 py-1.5 rounded-full text-xs border border-dashed border-stone-300 bg-white text-stone-400 tap-scale"
+            >
+              없음
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-      <TopHeader title="🗳️ 오늘의 투표" subtitle="오늘 함께 운동한 사람들에게 투표해요" />
+      <TopHeader title="🗳️ 모임 투표" subtitle="이번 모임 함께한 사람들에게 투표해요" />
 
       {!iAttendedToday ? (
         <section className="px-5 max-w-2xl mx-auto">
           <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
-            오늘 참석 체크를 한 사람만 투표할 수 있어요.<br />
-            홈 화면에서 먼저 참석 체크해주세요.
-          </p>
-        </section>
-      ) : candidates.length === 0 ? (
-        <section className="px-5 max-w-2xl mx-auto">
-          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
-            투표할 다른 참석자가 아직 없어요.
+            이번 모임에 참석 체크를 한 사람만 투표할 수 있어요.<br />
+            더보기 → 일정에서 먼저 참석 체크해주세요.
           </p>
         </section>
       ) : (
         <section className="px-5 max-w-2xl mx-auto space-y-4 mb-8">
           <div className="rounded-2xl p-3 text-center text-xs text-stone-500" style={{ backgroundColor: "#F0FBF1", border: "1px solid #4CAF50" }}>
-            🔒 완전 익명이에요. 본인에게는 투표할 수 없고, 카테고리별로 1표씩만 가능해요.
+            🔒 완전 익명이에요. 본인에게는 투표할 수 없고, 카테고리별로 1표씩만 가능해요. 투표 결과는 그 자리에서 공개되지 않고, 매월 1일에 한 달치를 모아서 발표돼요. 투표할 사람이 없으면 "없음"을 눌러도 돼요.
           </div>
-          {window.VOTE_CATEGORIES.map((cat) => {
-            const voted = hasVoted(cat.key);
-            return (
-              <div key={cat.key} className="bg-white rounded-2xl p-4 border border-stone-200">
-                <p className="text-sm font-bold text-stone-800 mb-1">{cat.emoji} {cat.label}</p>
-                <p className="text-xs text-stone-400 mb-3">{cat.question}</p>
-                {voted ? (
-                  <p className="text-xs font-semibold text-center py-2" style={{ color: "#4CAF50" }}>✅ 투표 완료! 내일 또 투표할 수 있어요.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {candidates.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => castVote(cat.key, c.id)}
-                        className="px-3 py-1.5 rounded-full text-xs border border-stone-200 bg-stone-50 text-stone-600 tap-scale"
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {window.VOTE_CATEGORIES.map((cat) => renderCategory(cat, candidates))}
+          {renderCategory(window.NEWCOMER_CATEGORY, newcomerCandidates)}
         </section>
       )}
 

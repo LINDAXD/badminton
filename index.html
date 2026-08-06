@@ -94,6 +94,15 @@ function App() {
   const [pending, setPending] = React.useState([]);
   const [checkinlog, setCheckinlog] = React.useState([]);
   const [dailyvotesDoc, setDailyvotesDoc] = React.useState({});
+  const [courtMatches, setCourtMatches] = React.useState({});
+
+  React.useEffect(() => {
+    const unsub = REFS.courtmatches.onSnapshot((snap) => {
+      const data = snap.data();
+      setCourtMatches(data && data.data ? data.data : {});
+    }, () => {});
+    return () => unsub();
+  }, []);
 
   React.useEffect(() => {
     const unsub = REFS.dailyvotes.onSnapshot((snap) => {
@@ -269,6 +278,13 @@ function App() {
   const birthdayMembers = roster.filter((m) => m.birthday && m.birthday === todayMD());
   const newMembersToday = roster.filter((m) => m.joinedAt === todayStr());
 
+  // 🏸 오늘 운영 — 운영자가 매칭 페이지 안 열어도 홈에서 바로 상황 파악할 수 있게
+  const activeCourts = Object.values(courtMatches).filter((m) => m && !m.done).length;
+  const occupiedIds = new Set();
+  Object.values(courtMatches).forEach((m) => { if (m && !m.done) [...m.teamA, ...m.teamB].forEach((p) => occupiedIds.add(p.id)); });
+  const waitingNow = attendingMembers.filter((m) => !occupiedIds.has(m.id));
+  const nextUp = waitingNow.slice(0, 2);
+
   return (
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
       {/* top */}
@@ -285,14 +301,13 @@ function App() {
         )}
       </header>
 
-      {/* 오늘의 소식 (생일/신규회원/친절왕 등을 한 카드로 묶어서 스크롤 줄이기) */}
+      {/* 오늘의 소식 (생일/신규회원/이달의 수상자를 한 카드로 묶어서 스크롤 줄이기) */}
       {(() => {
-        const kindWinnerId = dailyWinner(dailyvotesDoc, todayStr(), "kind");
-        const kindWinner = kindWinnerId && roster.find((m) => m.id === kindWinnerId);
         const items = [];
         if (birthdayMembers.length > 0) items.push({ emoji: "🎂", text: `오늘은 ${birthdayMembers.map((m) => m.name).join(", ")}님의 생일이에요!` });
         if (newMembersToday.length > 0) items.push({ emoji: "🎉", text: `${newMembersToday.map((m) => m.name).join(", ")}님, 버디에 오신 걸 환영해요!` });
-        if (kindWinner) items.push({ emoji: "😊", text: `오늘의 친절왕은 ${kindWinner.name}님이에요!` });
+        const kindLeader = monthlyLeader(dailyvotesDoc, "kind", roster);
+        if (kindLeader) items.push({ emoji: "😊", text: `이번 달 친절왕은 ${kindLeader.member.name}님이에요! (매월 1일 새로 집계돼요)` });
         if (items.length === 0) return null;
         return (
           <section className="px-5 pt-3 max-w-2xl mx-auto">
@@ -310,6 +325,35 @@ function App() {
       {myId && attendingMembers.some((m) => m.id === myId) && (
         <section className="px-5 pt-2 max-w-2xl mx-auto text-center">
           <a href="./vote.html" className="text-xs text-stone-400 underline underline-offset-2">🗳️ 오늘 함께한 사람에게 투표하기</a>
+        </section>
+      )}
+
+      {/* 🏸 오늘 운영 — 운영자가 한눈에 상황 파악 */}
+      {myId && attendCount > 0 && (
+        <section className="px-5 pt-3 max-w-2xl mx-auto">
+          <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
+            <p className="text-xs font-bold text-stone-500 mb-3">🏸 오늘 운영</p>
+            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+              <div>
+                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{attendCount}</p>
+                <p className="text-[10px] text-stone-400">오늘 참석</p>
+              </div>
+              <div>
+                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{activeCourts}</p>
+                <p className="text-[10px] text-stone-400">코트 운영중</p>
+              </div>
+              <div>
+                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{waitingNow.length}</p>
+                <p className="text-[10px] text-stone-400">현재 대기</p>
+              </div>
+            </div>
+            {nextUp.length > 0 && (
+              <p className="text-[11px] text-stone-400">다음 추천: {nextUp.map((p) => p.name).join(", ")}</p>
+            )}
+            <a href="./match.html" className="mt-2 block text-center text-xs font-semibold py-2 rounded-lg" style={{ backgroundColor: "#F0FBF1", color: "#2e7d32" }}>
+              🎲 매칭 페이지로 이동
+            </a>
+          </div>
         </section>
       )}
 

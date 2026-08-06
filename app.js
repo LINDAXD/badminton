@@ -130,7 +130,7 @@ window.BADGE_DEFS = [
   { key: "kind", emoji: "🤝", label: "친절왕", earn: (s, m) => !!(m && m.manualBadges && m.manualBadges.kind) || (s.kindVotes || 0) >= 5 || (s.kindWins || 0) >= 1 },
   { key: "mood", emoji: "😂", label: "분위기 메이커", earn: (s) => (s.moodWins || 0) >= 1 },
   { key: "growth", emoji: "💪", label: "성장왕", earn: (s) => (s.growthWins || 0) >= 1 },
-  { key: "bestplay", emoji: "🎯", label: "베스트 플레이", earn: (s) => (s.bestplayWins || 0) >= 1 },
+  { key: "newcomer", emoji: "🌱", label: "이달의 신인상", earn: (s) => (s.newcomerWins || 0) >= 1 },
   { key: "birthdayWeek", emoji: "🎂", label: "생일 주간", earn: (s, m) => {
     if (!m || !m.birthday || m.birthday.length !== 4) return false;
     const now = new Date();
@@ -262,21 +262,25 @@ function topPartners(memberId, matchhistory, n) {
   return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, n || 3);
 }
 
-// ---------- 오늘의 투표 시스템 (MVP / 친절왕 / 분위기메이커 / 성장왕 / 베스트플레이) ----------
+// ---------- 월간 투표 시스템 (친절왕 / MVP / 성장왕 / 분위기메이커 / 이달의 신인상) ----------
+// 결과는 그 자리에서 바로 공개하지 않고, 점수만 쌓아뒀다가 매월 자동으로 집계해서 보여줘요.
 window.VOTE_CATEGORIES = [
-  { key: "mvp", emoji: "⭐", label: "오늘의 MVP", question: "오늘 가장 잘했던 사람은 누구인가요?" },
-  { key: "kind", emoji: "😊", label: "오늘의 친절왕", question: "오늘 가장 친절했던 회원은 누구인가요?" },
-  { key: "mood", emoji: "😂", label: "분위기 메이커", question: "가장 즐거운 분위기를 만든 사람은 누구인가요?" },
-  { key: "growth", emoji: "💪", label: "성장왕", question: "오늘 가장 많이 늘었다고 생각하는 사람은 누구인가요?" },
-  { key: "bestplay", emoji: "🎯", label: "베스트 플레이", question: "오늘 가장 인상 깊었던 플레이를 한 사람은 누구인가요?" },
+  { key: "kind", emoji: "😊", label: "친절왕", question: "가장 배려를 많이 해준 회원은 누구인가요?" },
+  { key: "mvp", emoji: "⭐", label: "MVP", question: "가장 인상적인 플레이를 보여준 회원은 누구인가요?" },
+  { key: "growth", emoji: "💪", label: "성장왕", question: "가장 성장한 회원은 누구인가요?" },
+  { key: "mood", emoji: "😂", label: "분위기메이커", question: "분위기를 즐겁게 만든 회원은 누구인가요?" },
 ];
+// 신인상은 별도 카테고리 — 후보가 "최근 가입한 회원"으로 제한된다는 점만 달라요.
+window.NEWCOMER_CATEGORY = { key: "newcomer", emoji: "🌱", label: "이달의 신인상", question: "이번 달 가장 열심히/인상 깊게 참여한 신입 회원은 누구인가요?" };
+window.ALL_VOTE_CATEGORIES = [...window.VOTE_CATEGORIES, window.NEWCOMER_CATEGORY];
+
 
 // dailyvotes 문서 구조: { data: { [date]: { [category]: [{voterId, votedForId}] } } }
 // 특정 날짜, 특정 카테고리의 득표 집계 → { memberId: count }
 function tallyVotes(dailyvotes, date, category) {
   const votes = ((dailyvotes || {})[date] || {})[category] || [];
   const counts = {};
-  votes.forEach((v) => { counts[v.votedForId] = (counts[v.votedForId] || 0) + 1; });
+  votes.forEach((v) => { if (!v.votedForId) return; counts[v.votedForId] = (counts[v.votedForId] || 0) + 1; });
   return counts;
 }
 
@@ -337,13 +341,12 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
 
   const stats = computeAttendanceStats(member.id, checkinlog, allSessionDates);
   stats.kindVotes = computeKindVotes(member.id, kindvotes);
-  window.VOTE_CATEGORIES.forEach((c) => {
+  window.ALL_VOTE_CATEGORIES.forEach((c) => {
     stats[c.key + "Wins"] = cumulativeWins(dailyvotes, member.id, c.key, false);
   });
   const badges = earnedBadges(member, stats);
   const noShowCount = computeNoShowCount(member.id, scheduleItems || [], checkinlog, noshows);
   const partners = topPartners(member.id, matchhistory || [], 3);
-  const todayVoteWins = window.VOTE_CATEGORIES.filter((c) => dailyWinner(dailyvotes, todayStr(), c.key) === member.id);
 
   function toggleManualBadge(key) {
     const manualBadges = { ...(member.manualBadges || {}), [key]: !(member.manualBadges || {})[key] };
@@ -489,18 +492,10 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
             </div>
           </div>
 
-          {todayVoteWins.length > 0 && (
-            <div className="mb-4 rounded-2xl p-3 text-center" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
-              <p className="text-sm font-bold" style={{ color: "#B98900" }}>
-                오늘 {todayVoteWins.map((c) => `${c.emoji} ${c.label}`).join(", ")} 선정됐어요!
-              </p>
-            </div>
-          )}
-
           <div className="mb-4">
-            <p className="text-[11px] text-stone-400 mb-1.5">🗳️ 누적 투표 수상</p>
+            <p className="text-[11px] text-stone-400 mb-1.5">🗳️ 누적 월간 수상 (매월 1일 집계)</p>
             <div className="flex flex-wrap gap-1.5">
-              {window.VOTE_CATEGORIES.map((c) => (
+              {window.ALL_VOTE_CATEGORIES.map((c) => (
                 <span key={c.key} className="text-xs bg-stone-50 border border-stone-200 text-stone-600 rounded-full px-2.5 py-1">
                   {c.emoji} {c.label} {stats[c.key + "Wins"] || 0}회
                 </span>

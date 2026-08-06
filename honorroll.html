@@ -34,7 +34,7 @@ function App() {
     return () => unsub();
   }, []);
 
-  const activeCat = window.VOTE_CATEGORIES.find((c) => c.key === tab);
+  const activeCat = window.ALL_VOTE_CATEGORIES.find((c) => c.key === tab);
   const monthLeader = monthlyLeader(dailyvotesDoc, tab, roster);
 
   const ranking = roster
@@ -50,7 +50,7 @@ function App() {
 
       <section className="px-5 max-w-2xl mx-auto mb-4">
         <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {window.VOTE_CATEGORIES.map((c) => (
+          {window.ALL_VOTE_CATEGORIES.map((c) => (
             <button
               key={c.key}
               onClick={() => setTab(c.key)}
