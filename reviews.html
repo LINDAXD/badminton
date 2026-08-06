@@ -20,11 +20,13 @@
 <script type="text/babel" src="./app.js"></script>
 <script type="text/babel">
 
-function ReviewCard({ r, canDelete, onRemove, onOpenPhoto }) {
+function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName }) {
   const likedKey = `bm_reviewliked_${r.id}`;
   const [liked, setLiked] = React.useState(() => localStorage.getItem(likedKey) === "1");
   const likeCount = (r.likes || []).length;
   const photos = photosOf(r);
+  const [showComments, setShowComments] = React.useState(false);
+  const [commentText, setCommentText] = React.useState("");
 
   function toggleLike() {
     REFS.reviews.get().then((snap) => {
@@ -39,6 +41,19 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto }) {
     });
     if (liked) { localStorage.removeItem(likedKey); setLiked(false); }
     else { localStorage.setItem(likedKey, "1"); setLiked(true); }
+  }
+
+  function addComment() {
+    const text = commentText.trim();
+    if (!text) return;
+    const comment = { id: uid(), name: myName || "손님", text, date: todayStr() };
+    REFS.reviews.get().then((snap) => {
+      const data = snap.data() || {};
+      const items = data.items || [];
+      const next = items.map((it) => it.id === r.id ? { ...it, comments: [...(it.comments || []), comment] } : it);
+      REFS.reviews.set({ items: next }).catch(() => {});
+    });
+    setCommentText("");
   }
 
   return (
@@ -65,13 +80,43 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto }) {
             <button onClick={() => onRemove(r)} className="text-red-400 text-xs shrink-0">삭제</button>
           )}
         </div>
-        <div className="flex items-center gap-3 mt-2">
+        <div className="flex items-center gap-4 mt-2">
           <button onClick={toggleLike} className="text-xs flex items-center gap-1 tap-scale" style={{ color: liked ? "#4CAF50" : "#A8A8A8" }}>
             {liked ? "💚" : "🤍"} {likeCount}
+          </button>
+          <button onClick={() => setShowComments((v) => !v)} className="text-xs text-stone-400">
+            💬 댓글 {(r.comments || []).length}
           </button>
           <span className="text-[11px] text-stone-400 ml-auto">{r.author || "익명"} · {r.date}</span>
         </div>
       </div>
+
+      {showComments && (
+        <div className="bg-stone-50 px-4 py-3 border-t border-stone-100">
+          {(r.comments || []).length === 0 ? (
+            <p className="text-xs text-stone-400 mb-2">아직 댓글이 없어요.</p>
+          ) : (
+            <ul className="space-y-1.5 mb-2">
+              {r.comments.map((c) => (
+                <li key={c.id} className="text-xs">
+                  <span className="font-semibold text-stone-700">{c.name}</span>{" "}
+                  <span className="text-stone-500">{c.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <input
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addComment()}
+              placeholder="댓글을 남겨보세요"
+              className="flex-1 rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs"
+            />
+            <button onClick={addComment} className="text-white text-xs px-3 rounded-lg" style={{ backgroundColor: "#4CAF50" }}>등록</button>
+          </div>
+        </div>
+      )}
     </li>
   );
 }
@@ -252,7 +297,7 @@ function App() {
         ) : viewMode === "feed" ? (
           <ul className="space-y-3">
             {reviews.map((r) => (
-              <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} />
+              <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} />
             ))}
           </ul>
         ) : viewMode === "date" ? (
@@ -262,7 +307,7 @@ function App() {
                 <p className="text-xs font-bold text-stone-500 mb-2">📅 {fmtDate(d)} ({byDate[d].length})</p>
                 <ul className="space-y-3">
                   {byDate[d].map((r) => (
-                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} />
+                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} />
                   ))}
                 </ul>
               </div>
@@ -275,7 +320,7 @@ function App() {
                 <p className="text-xs font-bold text-stone-500 mb-2">🙋 {a} ({byAuthor[a].length})</p>
                 <ul className="space-y-3">
                   {byAuthor[a].map((r) => (
-                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} />
+                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} />
                   ))}
                 </ul>
               </div>

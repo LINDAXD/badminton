@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>내 정보 | Birdie</title>
+<title>나의 활동 | Birdie</title>
 <link rel="icon" href="data:," />
 <link rel="stylesheet" href="./style.css" />
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -27,6 +27,10 @@ function App() {
   const [reviews, setReviews] = React.useState([]);
   const [matchhistory, setMatchhistory] = React.useState([]);
   const [schedule, setSchedule] = React.useState([]);
+  const [checkinlog, setCheckinlog] = React.useState([]);
+  const [dailyvotes, setDailyvotes] = React.useState({});
+  const [kindvotes, setKindvotes] = React.useState([]);
+  const [noshows, setNoshows] = React.useState([]);
   const [ready, setReady] = React.useState(false);
   const [targetId, setTargetId] = React.useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -37,7 +41,11 @@ function App() {
     const u1 = REFS.reviews.onSnapshot((s) => { const d = s.data(); setReviews(d && d.items ? d.items : []); });
     const u2 = REFS.matchhistory.onSnapshot((s) => { const d = s.data(); setMatchhistory(d && d.items ? d.items : []); setReady(true); }, () => setReady(true));
     const u3 = REFS.schedule.onSnapshot((s) => { const d = s.data(); setSchedule(d && d.items ? d.items : []); });
-    return () => { u1(); u2(); u3(); };
+    const u4 = REFS.checkinlog.onSnapshot((s) => { const d = s.data(); setCheckinlog(d && d.items ? d.items : []); });
+    const u5 = REFS.dailyvotes.onSnapshot((s) => { const d = s.data(); setDailyvotes(d && d.data ? d.data : {}); });
+    const u6 = REFS.kindvotes.onSnapshot((s) => { const d = s.data(); setKindvotes(d && d.items ? d.items : []); });
+    const u7 = REFS.noshows.onSnapshot((s) => { const d = s.data(); setNoshows(d && d.items ? d.items : []); });
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); };
   }, []);
 
   const viewId = adminOn && targetId ? targetId : myId;
@@ -47,7 +55,7 @@ function App() {
   if (!myId) {
     return (
       <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-        <TopHeader title="🙋 내 정보" subtitle="내 활동을 모아볼 수 있어요" />
+        <TopHeader title="🙋 나의 활동" subtitle="내 기록을 한눈에 모아볼 수 있어요" />
         <section className="px-5 max-w-2xl mx-auto">
           <div className="bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
             <p className="text-sm text-stone-500 mb-3">먼저 홈에서 이름으로 입장해주세요.</p>
@@ -61,6 +69,11 @@ function App() {
     );
   }
 
+  const allSessionDates = checkinlog.map((c) => c.date);
+  const stats = computeAttendanceStats(viewId, checkinlog, allSessionDates);
+  const noShowCount = computeNoShowCount(viewId, schedule, checkinlog, noshows);
+  const badges = viewMember ? earnedBadges(viewMember, { ...stats, kindVotes: computeKindVotes(viewId, kindvotes) }) : [];
+  const partners = topPartners(viewId, matchhistory, 5);
   const myReviews = reviews.filter((r) => r.authorId === viewId);
 
   const myMatches = matchhistory.filter(
@@ -75,13 +88,28 @@ function App() {
   });
 
   const myAttendedSchedule = schedule
-    .filter((s) => (s.attendees || []).some((a) => a.id === viewId))
+    .filter((s) => (s.rsvp || []).some((r) => r.id === viewId && r.status === "in"))
     .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+
+  // 월별 참석 횟수 (최근 6개월)
+  const monthBuckets = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthBuckets.push({ key, label: `${d.getMonth() + 1}월`, count: 0 });
+  }
+  const myDates = new Set(checkinlog.filter((c) => c.memberId === viewId).map((c) => c.date));
+  myDates.forEach((d) => {
+    const b = monthBuckets.find((x) => x.key === d.slice(0, 7));
+    if (b) b.count++;
+  });
+  const maxMonthCount = Math.max(...monthBuckets.map((b) => b.count), 1);
 
   return (
     <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-      <TopHeader title="🙋 내 정보" subtitle="내 활동을 한눈에 모아봐요" />
+      <TopHeader title="🙋 나의 활동" subtitle="내 기록을 한눈에 모아봐요" />
 
       {adminOn && (
         <section className="px-5 max-w-2xl mx-auto mb-4">
@@ -101,16 +129,116 @@ function App() {
         </section>
       )}
 
-      <section className="px-5 max-w-2xl mx-auto mb-2">
-        <p className="text-sm font-bold text-stone-800">
-          {viewId === myId ? "나" : viewName}
-          <span className="text-stone-400 font-normal">의 활동</span>
-        </p>
+      {/* 프로필 요약 */}
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 flex items-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-stone-100 flex items-center justify-center overflow-hidden shrink-0">
+            {viewMember && viewMember.photoUrl ? (
+              <img src={viewMember.photoUrl} className="w-full h-full object-cover" alt={viewName} />
+            ) : (
+              <span className="text-2xl">🏸</span>
+            )}
+          </div>
+          <div>
+            <p className="text-base font-bold text-stone-900">{viewId === myId ? "나" : viewName} <span className="text-xs text-stone-400 font-normal">({viewName})</span></p>
+            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+              {viewMember && <GradeBadge grade={viewMember.grade} />}
+              {viewMember && viewMember.level && <MiniTag>{viewMember.level}</MiniTag>}
+              <span className="text-[11px] text-stone-400">🌱 {viewMember && viewMember.joinedAt ? fmtDate(viewMember.joinedAt) : "-"} 가입</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 핵심 지표 */}
+      <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <p className="text-[11px] text-stone-400">📅 총 참석 횟수</p>
+          <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{stats.totalCount}<span className="text-sm text-stone-400 font-normal">회</span></p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <p className="text-[11px] text-stone-400">🔥 연속 출석</p>
+          <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{stats.streak}<span className="text-sm text-stone-400 font-normal">회</span></p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <p className="text-[11px] text-stone-400">참석률</p>
+          <p className="headfont text-2xl text-stone-800">{stats.rate}<span className="text-sm text-stone-400 font-normal">%</span></p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <p className="text-[11px] text-stone-400">🚫 노쇼</p>
+          <p className="headfont text-2xl text-stone-800">{noShowCount}<span className="text-sm text-stone-400 font-normal">회</span></p>
+        </div>
+      </section>
+
+      {/* 월간 수상 누적 */}
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <p className="text-xs font-bold text-stone-500 mb-2">🗳️ 월간 수상 누적</p>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200 flex flex-wrap gap-1.5">
+          {window.ALL_VOTE_CATEGORIES.map((c) => (
+            <span key={c.key} className="text-xs bg-stone-50 border border-stone-200 text-stone-600 rounded-full px-2.5 py-1">
+              {c.emoji} {c.label} {cumulativeWins(dailyvotes, viewId, c.key, false)}회
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* 획득 배지 */}
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <p className="text-xs font-bold text-stone-500 mb-2">🏆 획득 배지</p>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          {badges.length === 0 ? (
+            <p className="text-xs text-stone-400">아직 획득한 배지가 없어요.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {badges.map((b) => (
+                <span key={b.key} className="text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-full px-2.5 py-1">
+                  {b.emoji} {b.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 월별 참석 그래프 */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <p className="text-xs font-bold text-stone-500 mb-2">📈 월별 참석 (최근 6개월)</p>
+        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <div className="flex items-end justify-between gap-2" style={{ height: "100px" }}>
+            {monthBuckets.map((b) => (
+              <div key={b.key} className="flex-1 flex flex-col items-center justify-end h-full">
+                <span className="text-[10px] text-stone-500 mb-1">{b.count > 0 ? b.count : ""}</span>
+                <div className="w-full rounded-t-md" style={{ height: `${Math.max(6, (b.count / maxMonthCount) * 100)}%`, backgroundColor: b.count > 0 ? "#4CAF50" : "#eee" }} />
+                <span className="text-[11px] text-stone-400 mt-1">{b.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 자주 함께한 회원 TOP5 */}
+      <section className="px-5 max-w-2xl mx-auto mb-6">
+        <p className="text-xs font-bold text-stone-500 mb-2">👥 가장 많이 함께 경기한 회원 TOP5</p>
+        {partners.length === 0 ? (
+          <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">아직 함께 경기한 기록이 없어요.</p>
+        ) : (
+          <ul className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
+            {partners.map((p, i) => (
+              <li key={p.name} className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="scorefont text-sm text-stone-400 w-4">{i + 1}</span>
+                  <span className="text-sm font-medium text-stone-800">{p.name}</span>
+                </div>
+                <span className="text-xs text-stone-500 scorefont">{p.count}번</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* match record */}
       <section className="px-5 max-w-2xl mx-auto mb-6">
-        <p className="text-xs font-bold text-stone-500 mb-2">🏆 경기 기록</p>
+        <p className="text-xs font-bold text-stone-500 mb-2">🎲 경기 기록</p>
         {!ready ? (
           <Skeleton className="h-16 w-full" />
         ) : (
@@ -131,7 +259,7 @@ function App() {
               <ul className="space-y-1.5 max-h-48 overflow-y-auto">
                 {myMatches.slice(0, 10).map((m) => (
                   <li key={m.id} className="text-xs text-stone-500 flex items-center justify-between">
-                    <span>{fmtDate(m.date)} · R{m.round}</span>
+                    <span>{fmtDate(m.date)} · Court {m.court}</span>
                     <span>{(m.teamA || []).map((p) => p.name).join("·")} {m.scoreA}:{m.scoreB} {(m.teamB || []).map((p) => p.name).join("·")}</span>
                   </li>
                 ))}
@@ -158,25 +286,38 @@ function App() {
         )}
       </section>
 
-      {/* my reviews */}
+      {/* my reviews / photos */}
       <section className="px-5 max-w-2xl mx-auto mb-8">
-        <p className="text-xs font-bold text-stone-500 mb-2">📸 올린 후기</p>
+        <p className="text-xs font-bold text-stone-500 mb-2">📸 올린 후기 · 사진 모아보기</p>
         {myReviews.length === 0 ? (
           <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">
             아직 올린 후기가 없어요.
           </p>
         ) : (
-          <ul className="space-y-3">
-            {myReviews.map((r) => (
-              <li key={r.id} className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
-                {r.photoUrl && <img src={r.photoUrl} alt="후기 사진" className="w-full max-h-56 object-cover" />}
-                <div className="p-3">
-                  {r.text && <p className="text-sm text-stone-700 whitespace-pre-wrap">{r.text}</p>}
-                  <p className="text-[11px] text-stone-400 mt-1">{r.date}</p>
+          <>
+            {(() => {
+              const allPhotos = myReviews.flatMap((r) => photosOf(r));
+              if (allPhotos.length === 0) return null;
+              return (
+                <div className="grid grid-cols-4 gap-1 mb-3">
+                  {allPhotos.slice(0, 12).map((url, i) => (
+                    <img key={i} src={url} className="aspect-square object-cover rounded-lg" alt="후기 사진" />
+                  ))}
                 </div>
-              </li>
-            ))}
-          </ul>
+              );
+            })()}
+            <ul className="space-y-3">
+              {myReviews.map((r) => (
+                <li key={r.id} className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+                  {photosOf(r)[0] && <img src={photosOf(r)[0]} alt="후기 사진" className="w-full max-h-56 object-cover" />}
+                  <div className="p-3">
+                    {r.text && <p className="text-sm text-stone-700 whitespace-pre-wrap">{r.text}</p>}
+                    <p className="text-[11px] text-stone-400 mt-1">{r.date}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
 
