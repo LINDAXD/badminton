@@ -31,6 +31,7 @@ function App() {
   const [dailyvotes, setDailyvotes] = React.useState({});
   const [kindvotes, setKindvotes] = React.useState([]);
   const [noshows, setNoshows] = React.useState([]);
+  const [dailylogin, setDailylogin] = React.useState([]);
   const [ready, setReady] = React.useState(false);
   const [targetId, setTargetId] = React.useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -45,7 +46,8 @@ function App() {
     const u5 = REFS.dailyvotes.onSnapshot((s) => { const d = s.data(); setDailyvotes(d && d.data ? d.data : {}); });
     const u6 = REFS.kindvotes.onSnapshot((s) => { const d = s.data(); setKindvotes(d && d.items ? d.items : []); });
     const u7 = REFS.noshows.onSnapshot((s) => { const d = s.data(); setNoshows(d && d.items ? d.items : []); });
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); };
+    const u8 = REFS.dailylogin.onSnapshot((s) => { const d = s.data(); setDailylogin(d && d.items ? d.items : []); });
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); };
   }, []);
 
   const viewId = adminOn && targetId ? targetId : myId;
@@ -71,6 +73,7 @@ function App() {
 
   const allSessionDates = checkinlog.map((c) => c.date);
   const stats = computeAttendanceStats(viewId, checkinlog, allSessionDates);
+  const loginStats = computeLoginAttendance(viewId, dailylogin);
   const noShowCount = computeNoShowCount(viewId, schedule, checkinlog, noshows);
   const badges = viewMember ? earnedBadges(viewMember, { ...stats, kindVotes: computeKindVotes(viewId, kindvotes) }) : [];
   const partners = topPartners(viewId, matchhistory, 5);
@@ -153,11 +156,11 @@ function App() {
       {/* 핵심 지표 */}
       <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
         <div className="bg-white rounded-2xl p-4 border border-stone-200">
-          <p className="text-[11px] text-stone-400">📅 총 참석 횟수</p>
+          <p className="text-[11px] text-stone-400">📅 총 모임 참석</p>
           <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{stats.totalCount}<span className="text-sm text-stone-400 font-normal">회</span></p>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-stone-200">
-          <p className="text-[11px] text-stone-400">🔥 연속 출석</p>
+          <p className="text-[11px] text-stone-400">🔥 연속 모임 참석</p>
           <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{stats.streak}<span className="text-sm text-stone-400 font-normal">회</span></p>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-stone-200">
@@ -167,6 +170,21 @@ function App() {
         <div className="bg-white rounded-2xl p-4 border border-stone-200">
           <p className="text-[11px] text-stone-400">🚫 노쇼</p>
           <p className="headfont text-2xl text-stone-800">{noShowCount}<span className="text-sm text-stone-400 font-normal">회</span></p>
+        </div>
+      </section>
+
+      {/* 앱 로그인 출석 — 특정 모임 참석과는 별개로, 로그인만 해도 하루 1번 자동으로 찍혀요 */}
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <p className="text-xs font-bold text-stone-500 mb-2">🎯 로그인 출석 (모임 참석과 별개)</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+            <p className="text-[11px] text-stone-400">총 출석일</p>
+            <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{loginStats.totalDays}<span className="text-sm text-stone-400 font-normal">일</span></p>
+          </div>
+          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+            <p className="text-[11px] text-stone-400">🔥 연속 출석일</p>
+            <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{loginStats.streak}<span className="text-sm text-stone-400 font-normal">일</span></p>
+          </div>
         </div>
       </section>
 

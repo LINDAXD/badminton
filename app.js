@@ -207,6 +207,24 @@ function combinedTodayAttendees(scheduleItems, checkinlog, roster) {
   return [...map.values()];
 }
 
+// 로그인 기준 "출석" 통계 — 총 출석일수, 연속 출석일수 (모임 "참석" 통계와는 완전히 별개예요)
+function computeLoginAttendance(memberId, dailylogin) {
+  const dates = [...new Set((dailylogin || []).filter((it) => it.memberId === memberId).map((it) => it.date))].sort();
+  const totalDays = dates.length;
+  let streak = 0;
+  if (totalDays > 0) {
+    let cursor = new Date(dates[dates.length - 1]);
+    const dateSet = new Set(dates);
+    while (true) {
+      const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+      if (!dateSet.has(key)) break;
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+  }
+  return { totalDays, streak };
+}
+
 function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
   const myDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
   const totalCount = myDates.size;
@@ -705,6 +723,8 @@ function useIdentity() {
     localStorage.setItem("bm_myName", name);
     setMyId(id);
     setMyName(name);
+    // 🎯 출석(로그인) — 특정 모임 "참석"과는 완전히 별개예요. 로그인만 하면 하루에 딱 1번 자동으로 찍혀요.
+    logDailyAttendance(id);
   }
   function logout() {
     localStorage.removeItem("bm_myId");
@@ -713,6 +733,19 @@ function useIdentity() {
     setMyName(null);
   }
   return { myId, myName, login, logout };
+}
+
+// 로그인 기준 "출석" 기록 — 하루에 한 번만 남아요 (같은 날 여러 번 로그인해도 중복 안 쌓여요).
+function logDailyAttendance(memberId) {
+  const today = todayStr();
+  REFS.dailylogin.get().then((snap) => {
+    const data = snap.data() || {};
+    const items = data.items || [];
+    const already = items.some((it) => it.memberId === memberId && it.date === today);
+    if (!already) REFS.dailylogin.set({ items: [...items, { id: uid(), memberId, date: today }] }).catch(() => {});
+  }).catch(() => {
+    REFS.dailylogin.set({ items: [{ id: uid(), memberId, date: today }] }).catch(() => {});
+  });
 }
 
 // ---------- 회원 명단 실시간 훅 ----------

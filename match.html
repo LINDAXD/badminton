@@ -244,21 +244,13 @@ const MATCH_MODES = [
 // "누구 쉬었지? 누구랑 붙이지?" 같은 운영자의 고민을 대신 알려주는 패널이에요.
 function OpsRecommendation({ waitingPlayers, players, matchhistory, matchMode, isFirstTimer, roster }) {
   if (players.length === 0) return null;
-  const tips = [];
 
-  // 1) 제일 오래 기다린 사람
-  if (waitingPlayers.length > 0) {
-    const longest = waitingPlayers[0];
-    tips.push(`${longest.name}님이 대기열 맨 앞이에요. 다음 코트에 우선 배정돼요.`);
-  }
+  // 우선순위별로 모아뒀다가, 너무 길어지지 않게 최대 4개까지만 보여줘요 (게임할수록 계속 쌓이던 문제 방지).
+  const urgentTips = []; // 오늘 반복 매칭 경고 — 가장 급한 것
+  const infoTips = []; // 대기 순서 / 첫 참석 안내
+  const modeTips = []; // 모드 추천
 
-  // 2) 오늘 첫 참석자
-  const firstTimersToday = players.filter((p) => isFirstTimer(p.id));
-  if (firstTimersToday.length > 0) {
-    tips.push(`${firstTimersToday.map((p) => p.name).join(", ")}님은 오늘 첫 참석이에요. 친절하게 챙겨주세요 🌱`);
-  }
-
-  // 3) 오늘 이미 여러 번 같이 친 조합
+  // 1) 오늘 이미 여러 번 같이 친 조합 (제일 급한 것부터 최대 2개만)
   const today = todayStr();
   const todayCounts = {};
   matchhistory.forEach((m) => {
@@ -271,13 +263,27 @@ function OpsRecommendation({ waitingPlayers, players, matchhistory, matchMode, i
       }
     }
   });
-  Object.keys(todayCounts).forEach((k) => {
-    if (todayCounts[k] < 3) return;
-    const [id1, id2] = k.split("|");
-    const p1 = players.find((p) => p.id === id1);
-    const p2 = players.find((p) => p.id === id2);
-    if (p1 && p2) tips.push(`${p1.name}님과 ${p2.name}님은 오늘 벌써 ${todayCounts[k]}번 같이 쳤어요. 다른 조합을 추천해요.`);
-  });
+  Object.keys(todayCounts)
+    .filter((k) => todayCounts[k] >= 3)
+    .sort((a, b) => todayCounts[b] - todayCounts[a])
+    .slice(0, 2)
+    .forEach((k) => {
+      const [id1, id2] = k.split("|");
+      const p1 = players.find((p) => p.id === id1);
+      const p2 = players.find((p) => p.id === id2);
+      if (p1 && p2) urgentTips.push(`${p1.name}님과 ${p2.name}님은 오늘 벌써 ${todayCounts[k]}번 같이 쳤어요. 다른 조합을 추천해요.`);
+    });
+
+  // 2) 제일 오래 기다린 사람
+  if (waitingPlayers.length > 0) {
+    infoTips.push(`${waitingPlayers[0].name}님이 대기열 맨 앞이에요. 다음 코트에 우선 배정돼요.`);
+  }
+
+  // 3) 오늘 첫 참석자 (한 줄로 합쳐서 자리 안 차지하게)
+  const firstTimersToday = players.filter((p) => isFirstTimer(p.id));
+  if (firstTimersToday.length > 0) {
+    infoTips.push(`${firstTimersToday.map((p) => p.name).join(", ")}님은 오늘 첫 참석이에요. 친절하게 챙겨주세요 🌱`);
+  }
 
   // 4) 오늘 모드 추천 (레벨 분포를 보고 판단)
   if (matchMode !== "social") {
@@ -286,10 +292,11 @@ function OpsRecommendation({ waitingPlayers, players, matchhistory, matchMode, i
       return m && ["왕초보", "초보"].includes(m.level);
     }).length;
     if (players.length > 0 && beginnerCount / players.length >= 0.6) {
-      tips.push("오늘은 왕초보/초보 비중이 높아요. 😊 친목 모드를 추천해요.");
+      modeTips.push("오늘은 왕초보/초보 비중이 높아요. 😊 친목 모드를 추천해요.");
     }
   }
 
+  const tips = [...urgentTips, ...infoTips, ...modeTips].slice(0, 4);
   if (tips.length === 0) return null;
 
   return (
