@@ -415,6 +415,7 @@ function App() {
       setWaitStart((data && data.waitStart) || {});
       setLockedCourts((data && data.lockedCourts) || []);
       setSkillRankOffset((data && data.skillRankOffset) || 0);
+      if (data && data.numCourts) setNumCourts(data.numCourts);
     }, () => {});
 
     const unsub9 = REFS.kindvotes.onSnapshot((snap) => {
@@ -449,12 +450,14 @@ function App() {
       waitStart: patch.waitStart !== undefined ? patch.waitStart : waitStart,
       lockedCourts: patch.lockedCourts !== undefined ? patch.lockedCourts : lockedCourts,
       skillRankOffset: patch.skillRankOffset !== undefined ? patch.skillRankOffset : skillRankOffset,
+      numCourts: patch.numCourts !== undefined ? patch.numCourts : numCourts,
     };
     setMatchMode(next.mode);
     setExcluded(next.excluded);
     setWaitStart(next.waitStart);
     setLockedCourts(next.lockedCourts);
     setSkillRankOffset(next.skillRankOffset);
+    setNumCourts(next.numCourts);
     REFS.matchmode.set(next).catch(() => {});
   }
 
@@ -1135,14 +1138,14 @@ function App() {
               <p className="text-sm font-semibold mb-2">사용할 코트 수</p>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setNumCourts((n) => Math.max(1, n - 1))}
+                  onClick={() => persistMatchSettings({ numCourts: Math.max(1, numCourts - 1) })}
                   className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
                 >
                   −
                 </button>
                 <span className="scorefont text-xl w-8 text-center">{numCourts}</span>
                 <button
-                  onClick={() => setNumCourts((n) => n + 1)}
+                  onClick={() => persistMatchSettings({ numCourts: numCourts + 1 })}
                   className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center"
                 >
                   +

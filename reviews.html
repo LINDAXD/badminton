@@ -47,6 +47,7 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName, myId }) {
   }
 
   function addComment() {
+    if (!myId) return;
     const text = commentText.trim();
     if (!text) return;
     const comment = { id: uid(), name: myName || "손님", text, date: todayStr(), replies: [] };
@@ -60,6 +61,7 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName, myId }) {
   }
 
   function addReply(commentId) {
+    if (!myId) return;
     const text = replyText.trim();
     if (!text) return;
     const reply = { id: uid(), name: myName || "손님", text, date: todayStr() };
@@ -132,9 +134,11 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName, myId }) {
                     <span className="font-semibold text-stone-700">{c.name}</span>{" "}
                     <span className="text-stone-500">{c.text}</span>
                   </p>
-                  <button onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)} className="text-[11px] text-stone-400 mt-0.5">
-                    답글
-                  </button>
+                  {myId && (
+                    <button onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)} className="text-[11px] text-stone-400 mt-0.5">
+                      답글
+                    </button>
+                  )}
 
                   {(c.replies || []).length > 0 && (
                     <ul className="mt-1.5 ml-4 space-y-1 border-l-2 border-stone-200 pl-2.5">
@@ -165,14 +169,20 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName, myId }) {
             </ul>
           )}
           <div className="flex gap-2">
-            <input
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addComment()}
-              placeholder="댓글을 남겨보세요"
-              className="flex-1 rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs"
-            />
-            <button onClick={addComment} className="text-white text-xs px-3 rounded-lg" style={{ backgroundColor: "#4CAF50" }}>등록</button>
+            {myId ? (
+              <>
+                <input
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addComment()}
+                  placeholder="댓글을 남겨보세요"
+                  className="flex-1 rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs"
+                />
+                <button onClick={addComment} className="text-white text-xs px-3 rounded-lg" style={{ backgroundColor: "#4CAF50" }}>등록</button>
+              </>
+            ) : (
+              <p className="text-xs text-stone-400">로그인하면 댓글을 남길 수 있어요.</p>
+            )}
           </div>
         </div>
       )}
