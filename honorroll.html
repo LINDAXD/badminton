@@ -2,105 +2,13 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<meta http-equiv="refresh" content="0; url=./stats.html" />
 <title>명예의 전당 | Birdie</title>
-<link rel="icon" href="data:," />
-<link rel="stylesheet" href="./style.css" />
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
-
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="./firebase.js"></script>
 </head>
 <body>
-<div id="root"></div>
-<script type="text/babel" src="./app.js"></script>
-<script type="text/babel">
-
-function App() {
-  const { myId } = useIdentity();
-  const { roster } = useRoster();
-  const [dailyvotesDoc, setDailyvotesDoc] = React.useState({});
-  const [tab, setTab] = React.useState("kind");
-
-  React.useEffect(() => {
-    const unsub = REFS.dailyvotes.onSnapshot((snap) => {
-      const data = snap.data();
-      setDailyvotesDoc(data && data.data ? data.data : {});
-    }, () => {});
-    return () => unsub();
-  }, []);
-
-  const activeCat = window.ALL_VOTE_CATEGORIES.find((c) => c.key === tab);
-  const monthLeader = monthlyLeader(dailyvotesDoc, tab, roster);
-
-  const ranking = roster
-    .map((m) => ({ member: m, count: cumulativeWins(dailyvotesDoc, m.id, tab, false) }))
-    .filter((r) => r.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
-
-  return (
-    <RequireLogin myId={myId}>
-    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-      <TopHeader title="🏆 명예의 전당" subtitle="누적 투표 수상 순위예요" />
-
-      <section className="px-5 max-w-2xl mx-auto mb-4">
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {window.ALL_VOTE_CATEGORIES.map((c) => (
-            <button
-              key={c.key}
-              onClick={() => setTab(c.key)}
-              className={`shrink-0 px-3 py-2 rounded-xl text-xs font-semibold tap-scale ${tab === c.key ? "text-white" : "bg-stone-50 text-stone-500"}`}
-              style={tab === c.key ? { backgroundColor: "#4CAF50" } : {}}
-            >
-              {c.emoji} {c.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {monthLeader && (
-        <section className="px-5 max-w-2xl mx-auto mb-4">
-          <div className="rise-in rounded-2xl p-4 text-center" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
-            <p className="text-xs font-bold mb-1" style={{ color: "#B98900" }}>👑 이달의 {activeCat.label}</p>
-            <p className="text-lg font-bold text-stone-800">{monthLeader.member.name}</p>
-            <p className="text-[11px] text-stone-400">이번 달 {monthLeader.count}회 선정</p>
-          </div>
-        </section>
-      )}
-
-      <section className="px-5 max-w-2xl mx-auto mb-8">
-        <p className="text-sm font-bold text-stone-700 mb-2">{activeCat.emoji} {activeCat.label} 통산 순위</p>
-        {ranking.length === 0 ? (
-          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
-            아직 이 카테고리 수상 기록이 없어요.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {ranking.map((r, i) => (
-              <li key={r.member.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg w-6 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
-                  <span className="text-sm font-medium text-stone-800">{r.member.name}</span>
-                </div>
-                <span className="text-xs text-stone-500 scorefont">{r.count}회</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <BottomNav active="more" />
-    </div>
-    </RequireLogin>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
+<p style="font-family: sans-serif; padding: 24px; color: #666;">
+  이 페이지는 통계 페이지로 합쳐졌어요. 이동 중이에요...
+  <a href="./stats.html">여기를 눌러도 이동해요</a>
+</p>
 </body>
 </html>

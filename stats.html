@@ -25,7 +25,9 @@ function App() {
   const { roster } = useRoster();
   const { adminOn } = useAdmin(isOfficerOf(roster, myId));
   const [checkinlog, setCheckinlog] = React.useState([]);
+  const [dailyvotesDoc, setDailyvotesDoc] = React.useState({});
   const [ready, setReady] = React.useState(false);
+  const [voteTab, setVoteTab] = React.useState("kind");
 
   React.useEffect(() => {
     const unsub = REFS.checkinlog.onSnapshot((snap) => {
@@ -33,6 +35,14 @@ function App() {
       setCheckinlog(data && data.items ? data.items : []);
       setReady(true);
     }, () => setReady(true));
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = REFS.dailyvotes.onSnapshot((snap) => {
+      const data = snap.data();
+      setDailyvotesDoc(data && data.data ? data.data : {});
+    }, () => {});
     return () => unsub();
   }, []);
 
@@ -96,10 +106,19 @@ function App() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 3);
 
+  // 투표 부문별 명예의 전당
+  const activeVoteCat = window.ALL_VOTE_CATEGORIES.find((c) => c.key === voteTab);
+  const voteMonthLeader = monthlyLeader(dailyvotesDoc, voteTab, roster);
+  const voteRanking = roster
+    .map((m) => ({ member: m, count: cumulativeWins(dailyvotesDoc, m.id, voteTab, false) }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
   return (
     <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-      <TopHeader title="📊 통계" subtitle="버디 활동을 숫자로 확인해요" />
+      <TopHeader title="📊 통계 · 명예의 전당" subtitle="버디 활동을 숫자로 확인해요" />
 
       {!ready ? (
         <section className="px-5 max-w-2xl mx-auto space-y-3">
@@ -179,9 +198,9 @@ function App() {
             )}
           </section>
 
-          {/* 명예의 전당 */}
+          {/* 명예의 전당 (출석) */}
           <section className="px-5 max-w-2xl mx-auto mb-8">
-            <p className="text-sm font-bold text-stone-700 mb-2">🏆 명예의 전당 (통산)</p>
+            <p className="text-sm font-bold text-stone-700 mb-2">🏆 명예의 전당 (통산 출석)</p>
             {hallOfFame.length === 0 ? (
               <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">아직 기록이 없어요.</p>
             ) : (
@@ -198,6 +217,49 @@ function App() {
           </section>
         </>
       )}
+
+      {/* 명예의 전당 (투표 부문별) */}
+      <section className="px-5 max-w-2xl mx-auto mb-8">
+        <p className="text-sm font-bold text-stone-700 mb-2">🗳️ 명예의 전당 (월간 투표)</p>
+        <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3">
+          {window.ALL_VOTE_CATEGORIES.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => setVoteTab(c.key)}
+              className={`shrink-0 px-3 py-2 rounded-xl text-xs font-semibold tap-scale ${voteTab === c.key ? "text-white" : "bg-stone-50 text-stone-500"}`}
+              style={voteTab === c.key ? { backgroundColor: "#4CAF50" } : {}}
+            >
+              {c.emoji} {c.label}
+            </button>
+          ))}
+        </div>
+
+        {voteMonthLeader && (
+          <div className="rise-in rounded-2xl p-4 text-center mb-3" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
+            <p className="text-xs font-bold mb-1" style={{ color: "#B98900" }}>👑 이번 달 {activeVoteCat.label}</p>
+            <p className="text-lg font-bold text-stone-800">{voteMonthLeader.member.name}</p>
+            <p className="text-[11px] text-stone-400">이번 달 {voteMonthLeader.count}회 선정</p>
+          </div>
+        )}
+
+        {voteRanking.length === 0 ? (
+          <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
+            아직 이 부문 수상 기록이 없어요.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {voteRanking.map((r, i) => (
+              <li key={r.member.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg w-6 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
+                  <span className="text-sm font-medium text-stone-800">{r.member.name}</span>
+                </div>
+                <span className="text-xs text-stone-500 scorefont">{r.count}회</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <BottomNav active="more" />
     </div>
