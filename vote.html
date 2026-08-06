@@ -43,7 +43,8 @@ function App() {
     return () => unsub();
   }, []);
 
-  const attendanceEvents = getEffectiveAttendanceEvents(schedule);
+  // 투표는 "오늘 진짜 있었던 모임"에만 해당돼요 — 아직 열리지 않은 다음 모임 참석 예정자는 투표 대상이 아니에요.
+  const attendanceEvents = schedule.filter((s) => s.date === today);
   const attendingTodayRaw = todayScheduleAttendees(attendanceEvents);
   const attendingToday = attendingTodayRaw.map((a) => roster.find((m) => m.id === a.id) || a);
   const iAttendedToday = !!(myId && attendingToday.some((m) => m.id === myId));
@@ -118,8 +119,8 @@ function App() {
       {!iAttendedToday ? (
         <section className="px-5 max-w-2xl mx-auto">
           <p className="text-sm text-stone-400 bg-white rounded-2xl p-6 text-center border border-dashed border-stone-200">
-            이번 모임에 참석 체크를 한 사람만 투표할 수 있어요.<br />
-            더보기 → 일정에서 먼저 참석 체크해주세요.
+            오늘 모임에 참석 체크를 한 사람만 투표할 수 있어요. 아직 열리지 않은 다음 모임엔 투표할 수 없어요.<br />
+            더보기 → 일정에서 먼저 오늘 날짜 모임에 참석 체크해주세요.
           </p>
         </section>
       ) : (
