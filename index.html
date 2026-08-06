@@ -109,6 +109,7 @@ function App() {
   const [loginInput, setLoginInput] = React.useState("");
   const [signupLevel, setSignupLevel] = React.useState("초보");
   const [showMySettings, setShowMySettings] = React.useState(false);
+  const [showLoginModal, setShowLoginModal] = React.useState(false);
   const [loginMsg, setLoginMsg] = React.useState("");
   const [rsvp, setRsvp] = React.useState({});
   const [notices, setNotices] = React.useState([]);
@@ -235,6 +236,7 @@ function App() {
           return;
         }
         login(existing.id, existing.name);
+        setShowLoginModal(false);
       } else {
         const pin = await appPrompt(`${name}님, 처음이시네요! 앞으로 본인 확인에 쓸 비밀번호를 설정해주세요.\n(반드시 숫자 4자리로만 입력해주세요. 예: 0524)`);
         if (pin === null) return;
@@ -242,6 +244,7 @@ function App() {
         const next = roster.map((m) => (m.id === existing.id ? { ...m, pin } : m));
         REFS.roster.set({ members: next }).catch(() => {});
         login(existing.id, existing.name);
+        setShowLoginModal(false);
         setLoginMsg("비밀번호가 설정됐어요. 다음부턴 이 비밀번호로 입장해주세요.");
       }
     } else {
@@ -300,7 +303,6 @@ function App() {
   const attendingMembers = todayScheduleAttendees(attendanceSource).map((a) => roster.find((m) => m.id === a.id) || a);
   const attendCount = attendingMembers.length;
   const isRealToday = attendanceSource.length > 0 && attendanceSource[0].date === todayStr();
-  const attendanceLabel = isRealToday ? "오늘 참석 인원" : (attendanceSource.length > 0 ? `${fmtDate(attendanceSource[0].date)} 참석 인원` : "오늘 참석 인원");
   // "출석"(오늘 진짜 체크인)이랑 "참석 예정"(다음 모임에 미리 참석 눌러둔 것)은 서로 다른 개념이라 구분해서 보여줘요.
   const iAmInAttendanceSource = myId && attendingMembers.some((m) => m.id === myId);
   const myStatusText = !iAmInAttendanceSource ? null
@@ -330,9 +332,9 @@ function App() {
             {myName}님 · 로그아웃
           </button>
         ) : (
-          <a href="#login" className="text-xs bg-white border rounded-full px-3 py-1.5 font-medium" style={{ borderColor: "#4CAF50", color: "#4CAF50" }}>
+          <button onClick={() => setShowLoginModal(true)} className="text-xs bg-white border rounded-full px-3 py-1.5 font-medium" style={{ borderColor: "#4CAF50", color: "#4CAF50" }}>
             로그인
-          </a>
+          </button>
         )}
       </header>
 
@@ -445,8 +447,8 @@ function App() {
 
       {/* login card */}
       <section id="login" className="px-5 max-w-2xl mx-auto mb-5">
+        {myId && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          {myId ? (
             <div>
               <div className="flex items-center justify-between">
                 <p className="text-sm"><span className="font-bold" style={{ color: "#4CAF50" }}>{myName}</span>님으로 로그인됨</p>
@@ -483,57 +485,88 @@ function App() {
                 </div>
               )}
             </div>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-stone-800 mb-1">이름으로 입장하기</p>
-              <p className="text-xs text-stone-400 mb-3">기존 멤버는 이름 그대로, 처음이면 가입 신청 후 관리자 승인을 받아요.</p>
-              <div className="flex gap-2">
-                <input
-                  value={loginInput}
-                  onChange={(e) => { setLoginInput(e.target.value); if (loginMsg) setLoginMsg(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && doLogin()}
-                  placeholder="이름 입력"
-                  className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2"
-                  style={{ "--tw-ring-color": "#4CAF50" }}
-                />
-                <button onClick={doLogin} className="text-white rounded-xl px-4 text-sm font-semibold tap-scale" style={{ backgroundColor: "#4CAF50" }}>입장</button>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[11px] text-stone-400 shrink-0">처음이면 내 실력</span>
-                <select
-                  value={signupLevel}
-                  onChange={(e) => setSignupLevel(e.target.value)}
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5"
-                >
-                  {window.LEVELS.map((lv) => (
-                    <option key={lv} value={lv}>{lv}</option>
-                  ))}
-                </select>
-              </div>
-              {loginMsg && <p className="text-xs mt-1.5" style={{ color: "#4CAF50" }}>{loginMsg}</p>}
-              <p className="text-[10px] text-stone-300 mt-2">🔒 다른 사람의 이름으로는 비밀번호 없이 입장할 수 없어요.</p>
-            </>
-          )}
         </div>
+        )}
       </section>
 
-      {/* upcoming schedule */}
-      <section className="px-5 max-w-2xl mx-auto mb-3">
+      {showLoginModal && !myId && (
+        <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center px-6" onClick={() => setShowLoginModal(false)}>
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm rise-in" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-bold text-stone-800 mb-1">🏸 이름으로 입장하기</p>
+            <p className="text-xs text-stone-400 mb-3">기존 멤버는 이름 그대로, 처음이면 가입 신청 후 관리자 승인을 받아요.</p>
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                value={loginInput}
+                onChange={(e) => { setLoginInput(e.target.value); if (loginMsg) setLoginMsg(""); }}
+                onKeyDown={(e) => e.key === "Enter" && doLogin()}
+                placeholder="이름 입력"
+                className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                style={{ "--tw-ring-color": "#4CAF50" }}
+              />
+              <button onClick={doLogin} className="text-white rounded-xl px-4 text-sm font-semibold tap-scale" style={{ backgroundColor: "#4CAF50" }}>입장</button>
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-[11px] text-stone-400 shrink-0">처음이면 내 실력</span>
+              <select
+                value={signupLevel}
+                onChange={(e) => setSignupLevel(e.target.value)}
+                className="text-xs border border-stone-200 rounded-lg px-2 py-1.5"
+              >
+                {window.LEVELS.map((lv) => (
+                  <option key={lv} value={lv}>{lv}</option>
+                ))}
+              </select>
+            </div>
+            {loginMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{loginMsg}</p>}
+            <p className="text-[10px] text-stone-300 mt-2">🔒 다른 사람의 이름으로는 비밀번호 없이 입장할 수 없어요.</p>
+            <button onClick={() => setShowLoginModal(false)} className="mt-4 w-full text-xs text-stone-400 underline underline-offset-2">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* upcoming schedule + 참석 인원을 한 카드로 합쳐서 붕 떠보이지 않게 */}
+      <section className="px-5 max-w-2xl mx-auto mb-4">
         <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
           <p className="text-[11px] text-stone-400 mb-2">🗓️ 다가오는 모임</p>
           {upcomingList.length === 0 ? (
             <p className="text-sm text-stone-400">예정된 일정이 없어요.</p>
           ) : (
             <>
-              <div className="mb-3 pb-3 border-b border-stone-100">
-                <p className="headfont text-2xl text-stone-900">
-                  {fmtDate(upcomingList[0].date)}
-                  {upcomingList[0].time && <span className="ml-2 text-lg" style={{ color: "#4CAF50" }}>{fmtTime(upcomingList[0].time)}</span>}
-                </p>
-                <p className="text-sm text-stone-600 mt-0.5">{upcomingList[0].title}{upcomingList[0].location ? ` · ${upcomingList[0].location}` : ""}</p>
+              <div className="flex items-end justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="headfont text-2xl text-stone-900">
+                    {fmtDate(upcomingList[0].date)}
+                    {upcomingList[0].time && <span className="ml-2 text-lg" style={{ color: "#4CAF50" }}>{fmtTime(upcomingList[0].time)}</span>}
+                  </p>
+                  <p className="text-sm text-stone-600 mt-0.5 truncate">{upcomingList[0].title}{upcomingList[0].location ? ` · ${upcomingList[0].location}` : ""}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{attendCount}<span className="text-xs text-stone-400 font-normal">명</span></p>
+                  <p className="text-[10px] text-stone-400">{isRealToday ? "오늘 참석" : "참석 예정"}</p>
+                </div>
               </div>
+
+              <div className="mt-3 pt-3 border-t border-stone-100">
+                {attendingMembers.length === 0 ? (
+                  <p className="text-xs text-stone-400">아직 참석한 사람이 없어요.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {attendingMembers.slice(0, 12).map((m) => (
+                      <span key={m.id} className="text-xs bg-stone-50 border border-stone-200 rounded-full px-2.5 py-1 text-stone-600">
+                        {isFirstTimer(m.id) && <span className="mr-0.5">🌱</span>}
+                        {m.name}
+                      </span>
+                    ))}
+                    {attendingMembers.length > 12 && (
+                      <span className="text-xs text-stone-400 px-1 py-1">+{attendingMembers.length - 12}명 더</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {upcomingList.length > 1 && (
-                <ul className="space-y-2">
+                <ul className="mt-3 pt-3 border-t border-stone-100 space-y-2">
                   {upcomingList.slice(1).map((s) => (
                     <li key={s.id} className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-stone-600 truncate">{s.title}</p>
@@ -545,31 +578,6 @@ function App() {
                 </ul>
               )}
             </>
-          )}
-        </div>
-      </section>
-
-      {/* quick cards */}
-      <section className="px-5 max-w-2xl mx-auto mb-4">
-        <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[11px] text-stone-400">{attendanceLabel}</p>
-            <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{attendCount}<span className="text-xs text-stone-400 font-normal">명</span></p>
-          </div>
-          {attendingMembers.length === 0 ? (
-            <p className="text-xs text-stone-400">아직 참석한 사람이 없어요.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {attendingMembers.slice(0, 12).map((m) => (
-                <span key={m.id} className="text-xs bg-stone-50 border border-stone-200 rounded-full px-2.5 py-1 text-stone-600">
-                  {isFirstTimer(m.id) && <span className="mr-0.5">🌱</span>}
-                  {m.name}
-                </span>
-              ))}
-              {attendingMembers.length > 12 && (
-                <span className="text-xs text-stone-400 px-1 py-1">+{attendingMembers.length - 12}명 더</span>
-              )}
-            </div>
           )}
         </div>
       </section>
