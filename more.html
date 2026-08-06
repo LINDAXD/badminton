@@ -42,6 +42,88 @@ function MenuGrid({ items }) {
   );
 }
 
+const RESET_CATEGORIES = [
+  { key: "reviews", label: "📸 후기 (사진·좋아요·댓글 포함)", refs: ["reviews"], shape: "items" },
+  { key: "notices", label: "📢 공지사항 (좋아요·댓글 포함)", refs: ["notices"], shape: "items" },
+  { key: "schedule", label: "🗓️ 일정 (등록된 모임 전부)", refs: ["schedule"], shape: "items" },
+  { key: "attendance", label: "✅ 출석/참석 기록 (체크인 로그, 로그인 출석, 오늘 참석 상태)", refs: ["checkinlog", "dailylogin", "checkin"], shape: "mixed" },
+  { key: "matching", label: "🎲 매칭/경기 기록 (경기 이력, 현재 코트 상태, 쉬는 상태, 전적 보정)", refs: ["matchhistory", "courtmatches", "restwish", "statsadjust"], shape: "mixed" },
+  { key: "votes", label: "🗳️ 투표 기록 (월간 투표, 또치고싶어요)", refs: ["dailyvotes", "kindvotes"], shape: "mixed" },
+  { key: "noshow", label: "🚫 노쇼 기록", refs: ["noshows"], shape: "items" },
+  { key: "guests", label: "🙋 게스트 명단", refs: ["guestlist"], shape: "items" },
+  { key: "roster", label: "⚠️ 회원 명단 (가입 승인 대기 포함) — 전원 로그아웃되고 다시 가입해야 해요!", refs: ["roster", "pending"], shape: "mixed" },
+];
+
+function DataResetPanel() {
+  const [checked, setChecked] = React.useState(() =>
+    Object.fromEntries(RESET_CATEGORIES.map((c) => [c.key, c.key !== "roster"]))
+  );
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  function toggle(key) {
+    setChecked((c) => ({ ...c, [key]: !c[key] }));
+  }
+
+  async function runReset() {
+    const selected = RESET_CATEGORIES.filter((c) => checked[c.key]);
+    if (selected.length === 0) return;
+    const labelList = selected.map((c) => c.label.replace(/\s*\(.*\)/, "").replace("⚠️ ", "")).join(", ");
+    if (!(await appConfirm(`정말 초기화할까요?\n\n${labelList}\n\n이 작업은 되돌릴 수 없어요. 테스트 데이터를 정리할 때만 사용해주세요.`))) return;
+    if (checked.roster) {
+      if (!(await appConfirm("회원 명단까지 지우면 본인(관리자)을 포함해 모든 회원이 로그아웃되고, 다시 가입 절차를 거쳐야 해요.\n\n정말 회원 명단도 같이 지울까요?"))) return;
+    }
+    setBusy(true);
+    try {
+      for (const cat of selected) {
+        for (const refKey of cat.refs) {
+          const ref = REFS[refKey];
+          if (!ref) continue;
+          if (refKey === "checkin") {
+            await ref.set({ data: {} });
+          } else if (refKey === "dailyvotes") {
+            await ref.set({ data: {} });
+          } else if (refKey === "roster") {
+            await ref.set({ members: [] });
+          } else {
+            await ref.set({ items: [] });
+          }
+        }
+      }
+      setMsg("선택한 데이터가 초기화됐어요! ✅");
+    } catch (e) {
+      setMsg("초기화 중 문제가 생겼어요. 다시 시도해주세요.");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setMsg(""), 4000);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 border border-red-200">
+      <p className="text-sm font-bold text-red-500 mb-1">🧹 테스트 데이터 초기화</p>
+      <p className="text-[11px] text-stone-400 mb-3">지워질 항목만 체크하고 초기화하세요. 회원 명단은 여기서 안 지워져요 (회원관리에서 따로 삭제해주세요).</p>
+      <div className="space-y-2 mb-3">
+        {RESET_CATEGORIES.map((c) => (
+          <label key={c.key} className="flex items-start gap-2 text-xs text-stone-600">
+            <input type="checkbox" checked={!!checked[c.key]} onChange={() => toggle(c.key)} className="mt-0.5" />
+            <span>{c.label}</span>
+          </label>
+        ))}
+      </div>
+      <button
+        onClick={runReset}
+        disabled={busy}
+        className="w-full text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-60"
+        style={{ backgroundColor: "#dc2626" }}
+      >
+        {busy ? "초기화 중..." : "선택한 항목 초기화"}
+      </button>
+      {msg && <p className="text-xs mt-2 text-center" style={{ color: msg.includes("됐어요") ? "#4CAF50" : "#dc2626" }}>{msg}</p>}
+    </div>
+  );
+}
+
 function ViewHeader({ title, emoji, onBack }) {
   return (
     <section className="px-5 max-w-2xl mx-auto mb-3">
@@ -499,6 +581,8 @@ function App() {
                 </div>
               );
             })()}
+
+            <DataResetPanel />
           </>
         ) : (
           <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">관리자 인증 후 이용 가능해요.</p>
