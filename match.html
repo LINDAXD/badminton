@@ -889,10 +889,9 @@ function App() {
       <section className="px-5 max-w-2xl mx-auto mb-5">
         <div className="flex gap-1.5 bg-stone-50 rounded-2xl p-1.5 border border-stone-100">
           {[
-            { key: "players", label: "참석자", emoji: "👥" },
-            { key: "checkin", label: "체크인", emoji: "✅" },
             { key: "match", label: "매칭", emoji: "🔀" },
             { key: "record", label: "기록", emoji: "🏆" },
+            ...(adminOn ? [{ key: "players", label: "참석자 관리", emoji: "👥" }] : []),
           ].map(({ key, label, emoji }) => (
             <button
               key={key}
@@ -1162,89 +1161,6 @@ function App() {
         </section>
       )}
 
-      {tab === "checkin" && (
-        <section className="px-5 mt-5 space-y-4">
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-            {!myId ? (
-              <>
-                <p className="text-sm font-semibold mb-1">로그인이 필요해요</p>
-                <p className="text-xs text-stone-400 mb-3">홈페이지에서 이름으로 먼저 입장해주세요. (처음이면 자동 등록돼요)</p>
-                <a
-                  href="./index.html#login"
-                  className="inline-block bg-[#4CAF50] text-white text-xs font-semibold rounded-full px-4 py-2"
-                >
-                  홈페이지에서 로그인하기
-                </a>
-              </>
-            ) : (
-              <div className="flex items-center justify-between">
-                <p className="text-sm">
-                  현재 <span className="font-bold text-[#4CAF50]">{(roster.find((m) => m.id === myId) || {}).name || "?"}</span> 님으로 로그인됨
-                </p>
-                <button onClick={resetIdentity} className="text-xs text-stone-400 underline underline-offset-2">
-                  로그아웃
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-sm font-semibold">오늘 참석 체크인</p>
-              {adminOn && (
-                <button onClick={resetCheckins} className="text-[11px] text-red-500 underline underline-offset-2">
-                  체크인 초기화
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-stone-400 mb-3">참석자 탭에서 이름을 탭해도 여기 자동 반영돼요. 본인 이름 버튼만 직접 누를 수 있어요.</p>
-            {!rosterReady ? (
-              <p className="text-xs text-stone-400">불러오는 중...</p>
-            ) : roster.length === 0 ? (
-              <p className="text-xs text-stone-400">아직 등록된 멤버가 없어요. 참석자 탭에서 먼저 멤버를 등록해주세요.</p>
-            ) : (
-              <ul className="space-y-2">
-                {roster.map((m) => {
-                  const status = rsvp[m.id];
-                  const isMe = m.id === myId;
-                  return (
-                    <li key={m.id} className="flex items-center justify-between border border-stone-200 rounded-xl px-3 py-2.5">
-                      <span className={`text-sm font-medium ${isMe ? "" : "text-stone-400"}`}>{m.name}{isMe ? " (나)" : ""}</span>
-                      <div className="flex gap-1.5">
-                        <button
-                          disabled={!isMe}
-                          onClick={() => setMyRsvp(m.id, "in")}
-                          className={`px-3 py-1 rounded-full text-xs border transition ${
-                            status === "in" ? "bg-[#4CAF50] text-white border-[#4CAF50]" : "bg-stone-50 text-stone-500 border-stone-200"
-                          } ${!isMe ? "opacity-40 cursor-not-allowed" : ""}`}
-                        >
-                          참석
-                        </button>
-                        <button
-                          disabled={!isMe}
-                          onClick={() => setMyRsvp(m.id, "out")}
-                          className={`px-3 py-1 rounded-full text-xs border transition ${
-                            status === "out" ? "bg-red-500 text-white border-red-500" : "bg-stone-50 text-stone-500 border-stone-200"
-                          } ${!isMe ? "opacity-40 cursor-not-allowed" : ""}`}
-                        >
-                          불참
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          {roster.length > 0 && (
-            <p className="text-xs text-center text-stone-400">
-              참석 {roster.filter((m) => rsvp[m.id] === "in").length}명 · 불참{" "}
-              {roster.filter((m) => rsvp[m.id] === "out").length}명 · 무응답{" "}
-              {roster.filter((m) => rsvp[m.id] !== "in" && rsvp[m.id] !== "out").length}명
-            </p>
-          )}
-        </section>
-      )}
 
       {tab === "match" && (
         <section className="px-5 mt-5 space-y-4">
@@ -1291,6 +1207,8 @@ function App() {
                   <div className="p-5 text-center space-y-2">
                     {lockedCourts.includes(courtNum) ? (
                       <p className="text-xs text-stone-400">🔒 이 코트는 잠겨있어요.</p>
+                    ) : !adminOn ? (
+                      <p className="text-xs text-stone-400">이 코트는 비어있어요. 곧 다음 경기가 배정될 거예요.</p>
                     ) : !isManualHere ? (
                       <>
                         <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
@@ -1298,17 +1216,15 @@ function App() {
                           onClick={() => startMatchOnCourt(courtNum)}
                           className="w-full rounded-xl py-3 font-semibold text-sm bg-[#4CAF50] text-white active:scale-[0.98] transition"
                         >
-                          🔀 이 코트 경기 시작 {!adminOn && "🔒"}
+                          🔀 이 코트 경기 시작
                         </button>
-                        {adminOn && (
-                          <button
-                            onClick={() => openManualPick(courtNum)}
-                            className="w-full rounded-xl py-2 text-xs font-semibold border"
-                            style={{ borderColor: "#FFD54F", color: "#B98900" }}
-                          >
-                            ✋ 직접 4명 선택해서 시작
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openManualPick(courtNum)}
+                          className="w-full rounded-xl py-2 text-xs font-semibold border"
+                          style={{ borderColor: "#FFD54F", color: "#B98900" }}
+                        >
+                          ✋ 직접 4명 선택해서 시작
+                        </button>
                       </>
                     ) : (
                       <ManualPicker
@@ -1374,23 +1290,25 @@ function App() {
                           </button>
                         )}
                       </div>
+                    ) : !adminOn ? (
+                      <div className="px-4 pb-4">
+                        <p className="text-xs text-stone-400 text-center">경기가 끝났어요. 곧 다음 경기가 시작될 거예요.</p>
+                      </div>
                     ) : !isManualHere ? (
                       <div className="px-4 pb-4 space-y-2">
                         <button
                           onClick={() => startMatchOnCourt(courtNum)}
                           className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white rounded-xl"
                         >
-                          🔀 이 코트 다음 경기 시작 {!adminOn && "🔒"}
+                          🔀 이 코트 다음 경기 시작
                         </button>
-                        {adminOn && (
-                          <button
-                            onClick={() => openManualPick(courtNum)}
-                            className="w-full rounded-xl py-2 text-xs font-semibold border"
-                            style={{ borderColor: "#FFD54F", color: "#B98900" }}
-                          >
-                            ✋ 직접 4명 선택해서 시작
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openManualPick(courtNum)}
+                          className="w-full rounded-xl py-2 text-xs font-semibold border"
+                          style={{ borderColor: "#FFD54F", color: "#B98900" }}
+                        >
+                          ✋ 직접 4명 선택해서 시작
+                        </button>
                       </div>
                     ) : (
                       <div className="px-4 pb-4">
