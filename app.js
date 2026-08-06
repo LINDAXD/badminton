@@ -91,7 +91,7 @@ function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
 }
 
 // 노쇼: 일정에 "✅참석"으로 RSVP하고(정원 안에 들었는데도) 실제로는 체크인 기록이 없는 경우
-function computeNoShowCount(memberId, scheduleItems, checkinlog) {
+function computeNoShowCount(memberId, scheduleItems, checkinlog, noshows) {
   const today = todayStr();
   const attendedDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
   let count = 0;
@@ -110,6 +110,8 @@ function computeNoShowCount(memberId, scheduleItems, checkinlog) {
     }
     if (!attendedDates.has(s.date)) count++;
   });
+  // 참석 체크했다가 취소한 경우(자동), 또는 관리자가 직접 준 노쇼 기록
+  count += (noshows || []).filter((n) => n.memberId === memberId).length;
   return count;
 }
 
@@ -205,7 +207,7 @@ const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 window.WEEKDAYS = WEEKDAYS;
 
 // ---------- 회원 프로필 카드 (클릭하면 열리는 모달) ----------
-function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems, kindvotes, matchhistory, dailyvotes, canEdit, isAdmin, onSave, onClose }) {
+function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems, kindvotes, matchhistory, dailyvotes, noshows, canEdit, isAdmin, onSave, onClose, onGiveNoShow }) {
   const [edit, setEdit] = useState(false);
   const [bio, setBio] = useState(member.bio || "");
   const [career, setCareer] = useState(member.career || "");
@@ -219,7 +221,7 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
     stats[c.key + "Wins"] = cumulativeWins(dailyvotes, member.id, c.key, false);
   });
   const badges = earnedBadges(member, stats);
-  const noShowCount = computeNoShowCount(member.id, scheduleItems || [], checkinlog);
+  const noShowCount = computeNoShowCount(member.id, scheduleItems || [], checkinlog, noshows);
   const partners = topPartners(member.id, matchhistory || [], 3);
   const todayVoteWins = window.VOTE_CATEGORIES.filter((c) => dailyWinner(dailyvotes, todayStr(), c.key) === member.id);
 
@@ -415,7 +417,7 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
           </div>
 
           {isAdmin && (
-            <div>
+            <div className="mb-4">
               <p className="text-[11px] text-stone-400 mb-1.5">🛠️ 관리자: 배지 수동 지급</p>
               <div className="flex flex-wrap gap-1.5">
                 {window.BADGE_DEFS.filter((b) => ["mvp", "chat", "kind"].includes(b.key)).map((b) => {
@@ -432,6 +434,18 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {isAdmin && onGiveNoShow && (
+            <div>
+              <p className="text-[11px] text-stone-400 mb-1.5">🚫 관리자: 노쇼 부여</p>
+              <button
+                onClick={() => onGiveNoShow(member)}
+                className="text-xs px-2.5 py-1.5 rounded-full border border-red-200 text-red-500 bg-red-50 tap-scale"
+              >
+                🚫 노쇼 1회 추가 (연락 없이 불참)
+              </button>
             </div>
           )}
         </div>

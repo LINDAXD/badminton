@@ -72,9 +72,7 @@ function splitScore(four, ctx) {
     const skillA = skillOf ? (skillOf(a[0].id) + skillOf(a[1].id)) / 2 : 0;
     const skillB = skillOf ? (skillOf(b[0].id) + skillOf(b[1].id)) / 2 : 0;
     const skillGap = Math.abs(skillA - skillB);
-    let skillWeight = 8;
-    if (mode === "random") skillWeight = 0;
-    else if (mode === "skill") skillWeight = 14; // 실력전: 팀간 실력차를 더 엄격하게
+    const skillWeight = mode === "skill" ? 14 : 8; // 실력전: 팀간 실력차를 더 엄격하게
     const skillScore = skillGap * skillWeight;
 
     // 4) 균형 모드에서는 왕초보/초보끼리만 뭉치지 않도록, 팀 내부 실력차가 "적당히" 섞이는 조합을 살짝 선호
@@ -145,11 +143,12 @@ function generateRound(players, numCourts, hist, restIds = new Set(), skillOf = 
 }
 
 // ---------- main app ----------
-function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onCancel, pinnedPair, onTogglePin }) {
+function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onAutoFill, onCancel, pinnedPair, onTogglePin }) {
   const selectedPlayers = waitingPlayers.filter((p) => selected.includes(p.id));
   return (
     <div className="text-left bg-stone-50 rounded-xl p-3 space-y-2">
       <p className="text-xs font-semibold text-stone-600">직접 선택 ({selected.length}/4)</p>
+      <p className="text-[11px] text-stone-400">1~3명만 지정하고 나머지는 자동으로 채울 수도 있어요.</p>
       {waitingPlayers.length === 0 ? (
         <p className="text-xs text-stone-400">대기 중인 인원이 없어요.</p>
       ) : (
@@ -194,14 +193,24 @@ function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onCancel,
         </div>
       )}
       <div className="flex gap-2 pt-1">
-        <button
-          disabled={selected.length !== 4}
-          onClick={onConfirm}
-          className="flex-1 rounded-lg py-2 text-xs font-semibold text-white disabled:bg-stone-300 disabled:text-stone-500"
-          style={selected.length === 4 ? { backgroundColor: "#4CAF50" } : {}}
-        >
-          이 4명으로 시작
-        </button>
+        {selected.length > 0 && selected.length < 4 ? (
+          <button
+            onClick={onAutoFill}
+            className="flex-1 rounded-lg py-2 text-xs font-semibold text-white"
+            style={{ backgroundColor: "#4CAF50" }}
+          >
+            나머지 {4 - selected.length}명 자동으로 채우고 시작
+          </button>
+        ) : (
+          <button
+            disabled={selected.length !== 4}
+            onClick={onConfirm}
+            className="flex-1 rounded-lg py-2 text-xs font-semibold text-white disabled:bg-stone-300 disabled:text-stone-500"
+            style={selected.length === 4 ? { backgroundColor: "#4CAF50" } : {}}
+          >
+            이 4명으로 시작
+          </button>
+        )}
         <button onClick={onCancel} className="flex-1 rounded-lg py-2 text-xs font-semibold border border-stone-200 text-stone-500">
           취소
         </button>
@@ -234,10 +243,11 @@ function App() {
   const [matchhistory, setMatchhistory] = useState([]);
   const [statsAdjust, setStatsAdjust] = useState({});
   const [checkinlog, setCheckinlog] = useState([]);
-  const [matchMode, setMatchMode] = useState("balance"); // "random" | "balance" | "skill"
+  const [matchMode, setMatchMode] = useState("balance"); // "balance" | "skill"
   const [excluded, setExcluded] = useState([]);
   const [waitStart, setWaitStart] = useState({});
   const [lockedCourts, setLockedCourts] = useState([]);
+  const [skillRankOffset, setSkillRankOffset] = useState(0);
   const [kindVotes, setKindVotes] = useState([]);
   const [myId, setMyId] = useState(() => localStorage.getItem("bm_myId") || null);
   const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
@@ -310,10 +320,12 @@ function App() {
 
     const unsub8 = REFS.matchmode.onSnapshot((snap) => {
       const data = snap.data();
-      setMatchMode((data && data.mode) || "balance");
+      const storedMode = (data && data.mode) || "balance";
+      setMatchMode(storedMode === "skill" ? "skill" : "balance"); // 예전에 저장된 "random" 값은 균형으로 취급
       setExcluded((data && data.excluded) || []);
       setWaitStart((data && data.waitStart) || {});
       setLockedCourts((data && data.lockedCourts) || []);
+      setSkillRankOffset((data && data.skillRankOffset) || 0);
     }, () => {});
 
     const unsub9 = REFS.kindvotes.onSnapshot((snap) => {
@@ -334,18 +346,20 @@ function App() {
     };
   }, []);
 
-  // 매칭 모드 / 제외 회원 / 대기시작시각 / 코트 잠금을 한 문서에 같이 저장해요
+  // 매칭 모드 / 제외 회원 / 대기시작시각 / 코트 잠금 / 실력전 순위블록 오프셋을 한 문서에 같이 저장해요
   function persistMatchSettings(patch) {
     const next = {
       mode: patch.mode !== undefined ? patch.mode : matchMode,
       excluded: patch.excluded !== undefined ? patch.excluded : excluded,
       waitStart: patch.waitStart !== undefined ? patch.waitStart : waitStart,
       lockedCourts: patch.lockedCourts !== undefined ? patch.lockedCourts : lockedCourts,
+      skillRankOffset: patch.skillRankOffset !== undefined ? patch.skillRankOffset : skillRankOffset,
     };
     setMatchMode(next.mode);
     setExcluded(next.excluded);
     setWaitStart(next.waitStart);
     setLockedCourts(next.lockedCourts);
+    setSkillRankOffset(next.skillRankOffset);
     REFS.matchmode.set(next).catch(() => {});
   }
 
@@ -652,6 +666,22 @@ function App() {
 
   const matchCtx = { hist, skillOf, mode: matchMode, todayPairCount, isFirstTimer, isKindOrStrong };
 
+  // 실력전 모드: 대기 중인 사람을 실력순으로 줄세운 뒤, 4명씩 블록으로 나눠서 코트를 배정해요.
+  // 블록 경계는 매번 한 칸씩 밀려서(오프셋 회전) 매번 같은 조합만 반복되지 않게 해요.
+  // (예: 이번엔 1-4위/5-8위, 다음엔 2-5위/6-9위 ... 이렇게 밀리다 보면 1위와 8위가 한 그룹이 될 수도 있는데,
+  //  그때도 팀은 실력 차가 가장 적은 조합으로 갈라서 항상 공평하게 만들어요.)
+  function pickFourForCourt() {
+    if (matchMode !== "skill") return waitingPlayers.slice(0, 4);
+    const byRank = [...waitingPlayers].sort((a, b) => skillOf(b.id) - skillOf(a.id));
+    const n = byRank.length;
+    if (n < 4) return byRank;
+    const start = skillRankOffset % n;
+    // start 위치부터 4명(부족하면 앞에서부터 이어서) 뽑아요
+    const four = [];
+    for (let i = 0; i < 4; i++) four.push(byRank[(start + i) % n]);
+    return four;
+  }
+
   function startMatchOnCourt(courtNum) {
     if (!adminOn) {
       tryAdminUnlock();
@@ -665,10 +695,11 @@ function App() {
       window.alert("대기 중인 인원이 4명 미만이에요. 체크인/참석자를 확인해주세요.");
       return;
     }
-    const four = waitingPlayers.slice(0, 4);
+    const four = pickFourForCourt();
     const { a, b } = splitScore(four, matchCtx);
     const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
     persistCourtMatches({ ...courtMatches, [courtNum]: match });
+    if (matchMode === "skill") persistMatchSettings({ skillRankOffset: skillRankOffset + 1 });
     setMatchSeq((n) => n + 1);
     setTab("match");
     setJustShuffled(true);
@@ -707,14 +738,13 @@ function App() {
     setPinnedPair([]);
   }
 
-  function confirmManualStart(courtNum) {
-    if (manualSelected.length !== 4) return;
-    const four = players.filter((p) => manualSelected.includes(p.id));
+  function startCourtWithFour(courtNum, four) {
     let a, b;
-    if (pinnedPair.length === 2) {
+    const pinnedInFour = pinnedPair.filter((id) => four.some((p) => p.id === id));
+    if (pinnedInFour.length === 2) {
       // 고정된 두 명을 한 팀으로 묶고, 나머지 둘이 상대 팀
-      a = four.filter((p) => pinnedPair.includes(p.id));
-      b = four.filter((p) => !pinnedPair.includes(p.id));
+      a = four.filter((p) => pinnedInFour.includes(p.id));
+      b = four.filter((p) => !pinnedInFour.includes(p.id));
     } else {
       ({ a, b } = splitScore(four, matchCtx));
     }
@@ -728,6 +758,28 @@ function App() {
     setJustShuffled(true);
     setTimeout(() => setJustShuffled(false), 500);
   }
+
+  function confirmManualStart(courtNum) {
+    if (manualSelected.length !== 4) return;
+    const four = players.filter((p) => manualSelected.includes(p.id));
+    startCourtWithFour(courtNum, four);
+  }
+
+  // 지정한 몇 명만 고르고, 나머지는 대기열에서 무작위로 채워서 바로 시작
+  function autoFillAndStart(courtNum) {
+    if (manualSelected.length < 1 || manualSelected.length >= 4) return;
+    const chosen = players.filter((p) => manualSelected.includes(p.id));
+    const restPool = waitingPlayers.filter((p) => !manualSelected.includes(p.id));
+    const shuffled = [...restPool].sort(() => Math.random() - 0.5);
+    const need = 4 - chosen.length;
+    if (shuffled.length < need) {
+      window.alert(`대기 인원이 부족해요. (${need}명 더 필요해요)`);
+      return;
+    }
+    const four = [...chosen, ...shuffled.slice(0, need)];
+    startCourtWithFour(courtNum, four);
+  }
+
 
   // 관리자: 이미 시작한(아직 안 끝난) 경기도 팀을 다시 섞어요
   function reshuffleCourt(courtNum) {
@@ -984,13 +1036,11 @@ function App() {
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
             <p className="text-sm font-semibold mb-1">매칭 모드</p>
             <p className="text-[11px] text-stone-400 mb-2">
-              {matchMode === "random" && "완전 무작위로 섞어요."}
               {matchMode === "balance" && "실력 차이, 오늘 만난 횟수, 첫 참석 여부를 종합해서 가장 공평한 팀을 짜요. (추천)"}
-              {matchMode === "skill" && "팀 간 실력 차이를 최대한 엄격하게 맞춰요."}
+              {matchMode === "skill" && "참석자를 실력순으로 줄세워 4명씩 묶어 코트를 배정해요. 매번 묶음이 한 칸씩 밀려서 다양한 상대와 만나고, 묶인 4명 안에서도 팀은 항상 실력차가 가장 적은 조합으로 짜요."}
             </p>
             <div className="flex gap-1.5">
               {[
-                { key: "random", label: "🎲 랜덤" },
                 { key: "balance", label: "⚖️ 균형" },
                 { key: "skill", label: "🔥 실력전" },
               ].map((opt) => (
@@ -1021,7 +1071,7 @@ function App() {
                   const tier = tierMap[p.id];
                   const badge = tierBadge[tier];
                   const rosterMember = roster.find((r) => r.id === p.id);
-                  const showLevel = stats.games < MIN_GAMES_FOR_TIER && rosterMember && rosterMember.level;
+                  const showLevel = rosterMember && rosterMember.level;
                   const isExcluded = excluded.includes(p.id);
                   return (
                   <li
@@ -1224,6 +1274,7 @@ function App() {
                         selected={manualSelected}
                         onToggle={toggleManualPick}
                         onConfirm={() => confirmManualStart(courtNum)}
+                        onAutoFill={() => autoFillAndStart(courtNum)}
                         onCancel={cancelManualPick}
                         pinnedPair={pinnedPair}
                         onTogglePin={togglePin}
@@ -1283,15 +1334,6 @@ function App() {
                       </div>
                     ) : !isManualHere ? (
                       <div className="px-4 pb-4 space-y-2">
-                        {myId && [...m.teamA, ...m.teamB].some((p) => p.id === myId) && (
-                          !kindVotes.some((v) => v.matchId === m.id && v.voterId === myId) ? (
-                            <button onClick={() => voteKind(courtNum)} className="w-full py-2 text-xs font-semibold rounded-xl border" style={{ borderColor: "#FFD54F", color: "#B98900" }}>
-                              👍 이분들과 또 치고 싶어요 (익명)
-                            </button>
-                          ) : (
-                            <p className="text-[11px] text-stone-400 text-center">투표 완료! 감사해요 🙏</p>
-                          )
-                        )}
                         <button
                           onClick={() => startMatchOnCourt(courtNum)}
                           className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white rounded-xl"
@@ -1315,6 +1357,7 @@ function App() {
                           selected={manualSelected}
                           onToggle={toggleManualPick}
                           onConfirm={() => confirmManualStart(courtNum)}
+                        onAutoFill={() => autoFillAndStart(courtNum)}
                           onCancel={cancelManualPick}
                           pinnedPair={pinnedPair}
                           onTogglePin={togglePin}

@@ -152,6 +152,32 @@ function App() {
     REFS.schedule.set({
       items: schedule.map((s) => (s.id === item.id ? { ...s, rsvp: next } : s)),
     }).catch(() => {});
+    // 오늘 일정에 ✅참석을 누르면 오늘 참석 체크(매칭 대상)도 자동으로 같이 돼요
+    if (item.date === todayStr()) {
+      const wasIn = rsvp[myId] === "in";
+      if (status === "in" && !wasIn) {
+        const nextRsvp = { ...rsvp, [myId]: "in" };
+        setRsvp(nextRsvp);
+        REFS.checkin.set({ data: nextRsvp }).catch(() => {});
+        REFS.checkinlog.get().then((snap) => {
+          const data = snap.data() || {};
+          const items = data.items || [];
+          const already = items.some((it) => it.memberId === myId && it.date === todayStr());
+          if (!already) REFS.checkinlog.set({ items: [...items, { id: uid(), memberId: myId, date: todayStr() }] }).catch(() => {});
+        }).catch(() => {});
+      } else if (status !== "in" && wasIn) {
+        // 참석이었다가 취소(미정/불참)로 바꾸면 참석 체크도 같이 풀리고, 노쇼 1회로 자동 기록돼요
+        const nextRsvp = { ...rsvp, [myId]: "out" };
+        setRsvp(nextRsvp);
+        REFS.checkin.set({ data: nextRsvp }).catch(() => {});
+        REFS.noshows.get().then((snap) => {
+          const data = snap.data() || {};
+          const items = data.items || [];
+          REFS.noshows.set({ items: [...items, { id: uid(), memberId: myId, date: todayStr(), source: "auto" }] }).catch(() => {});
+        }).catch(() => {});
+        window.alert("참석을 취소하셨어요. 노쇼 1회로 자동 기록돼요.");
+      }
+    }
   }
 
   function fmtCountdown(deadline) {
@@ -432,6 +458,35 @@ function App() {
           <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">관리자 인증 후 이용 가능해요.</p>
         )}
       </section>
+
+      {/* 이번 달 미참석 회원 (admin only) */}
+      {adminOn && (() => {
+        const thisMonth = todayStr().slice(0, 7);
+        const attendedThisMonth = new Set(checkinlog.filter((c) => c.date.slice(0, 7) === thisMonth).map((c) => c.memberId));
+        const needsAttention = roster.filter((m) => {
+          if (attendedThisMonth.has(m.id)) return false;
+          // 이번 달 안에 아직 기회가 남아있는 신규회원(가입 7일 이내)은 일단 제외하고, 그 외엔 전부 대상
+          if (m.joinedAt && m.joinedAt.slice(0, 7) === thisMonth) {
+            const daysSinceJoin = Math.floor((new Date() - new Date(m.joinedAt)) / 86400000);
+            if (daysSinceJoin < 20) return false; // 가입 초반엔 아직 여유
+          }
+          return true;
+        });
+        if (needsAttention.length === 0) return null;
+        return (
+          <section className="px-5 max-w-2xl mx-auto mb-6">
+            <p className="text-sm font-bold text-stone-700 mb-2">⚠️ 이번 달 아직 참석 안 한 회원</p>
+            <p className="text-[11px] text-stone-400 mb-2">가입일부터, 또는 매달 최소 1회는 참석하는 게 원칙이에요.</p>
+            <div className="bg-white rounded-2xl p-4 border border-stone-200">
+              <div className="flex flex-wrap gap-1.5">
+                {needsAttention.map((m) => (
+                  <span key={m.id} className="text-xs bg-red-50 border border-red-200 text-red-500 rounded-full px-2.5 py-1">{m.name}</span>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* 대관비 관리 (admin only) */}
       {adminOn && (

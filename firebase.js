@@ -43,6 +43,7 @@ window.REFS = {
   matchmode: db.collection("badminton").doc("matchmode"),     // 매칭 모드(랜덤/균형/실력전) + 제외 회원
   kindvotes: db.collection("badminton").doc("kindvotes"),     // "또 치고싶어요" 익명 투표 (친절왕 집계용)
   dailyvotes: db.collection("badminton").doc("dailyvotes"),   // 오늘의 MVP/친절왕/분위기메이커/성장왕/베스트플레이 익명 투표
+  noshows: db.collection("badminton").doc("noshows"),         // 노쇼 기록 (자동/관리자 부여)
 };
 
 // ---- 공통 상수 ----

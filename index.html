@@ -251,29 +251,6 @@ function App() {
     window.alert("비밀번호가 변경됐어요.");
   }
 
-  function checkInNow() {
-    if (!myId) {
-      document.getElementById("login")?.scrollIntoView({ behavior: "smooth" });
-      setLoginMsg("먼저 이름으로 입장해주세요.");
-      return;
-    }
-    const next = { ...rsvp, [myId]: "in" };
-    setRsvp(next);
-    REFS.checkin.set({ data: next }).catch(() => {});
-    logAttendance(myId);
-    setCheckedInMsg("참석 체크 완료! 오늘 만나요 🏸");
-    setTimeout(() => setCheckedInMsg(""), 2500);
-  }
-
-  function cancelCheckIn() {
-    if (!myId) return;
-    const next = { ...rsvp, [myId]: "out" };
-    setRsvp(next);
-    REFS.checkin.set({ data: next }).catch(() => {});
-    setCheckedInMsg("참석이 취소됐어요.");
-    setTimeout(() => setCheckedInMsg(""), 2500);
-  }
-
   const attendCount = Object.values(rsvp).filter((v) => v === "in").length;
   const attendingMembers = roster.filter((m) => rsvp[m.id] === "in");
   const latestPhoto = reviews.find((r) => photosOf(r).length >= 3);
@@ -376,19 +353,16 @@ function App() {
         <p className="text-stone-400 mt-2 text-sm">오늘도 같이 뛰어요, 우리 버디</p>
 
         <div className="flex gap-2 justify-center mt-6">
-          {rsvp[myId] === "in" ? (
-            <button onClick={cancelCheckIn} className="tap-scale text-sm font-bold px-7 py-4 rounded-full shadow-sm border-2" style={{ borderColor: "#4CAF50", color: "#4CAF50", backgroundColor: "white" }}>
-              ✅ 참석취소
-            </button>
-          ) : (
-            <button onClick={checkInNow} className="tap-scale text-white text-base font-bold px-8 py-4 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
-              ✋ 참석하기
-            </button>
-          )}
+          <a href="./more.html" className="tap-scale text-white text-base font-bold px-8 py-4 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
+            🗓️ 모임 참석하기
+          </a>
           <a href="./match.html" className="tap-scale text-sm font-bold px-6 py-4 rounded-full border" style={{ borderColor: "#FFD54F", color: "#B98900", backgroundColor: "#FFFBEA" }}>
             🎲 랜덤매칭
           </a>
         </div>
+        {rsvp[myId] === "in" && (
+          <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>✅ 오늘 참석으로 체크되어 있어요</p>
+        )}
         {checkedInMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{checkedInMsg}</p>}
       </section>
 
