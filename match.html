@@ -761,7 +761,7 @@ function App() {
   // 현재 활성 매칭에 배정된(=아직 안 끝난) 선수 id 집합
   const occupiedIds = new Set();
   Object.values(courtMatches).forEach((m) => {
-    if (m && !m.done) [...m.teamA, ...m.teamB].forEach((p) => occupiedIds.add(p.id));
+    if (m && !m.done && m.date === todayStr()) [...m.teamA, ...m.teamB].forEach((p) => occupiedIds.add(p.id));
   });
 
   // 대기 중(체크인 했지만 지금 안 뛰고 있는) 선수들 — 오래 쉰 사람 우선, 쉬고 싶어요/제외된 사람은 빠짐
@@ -807,7 +807,7 @@ function App() {
     }
     const four = pickFourForCourt();
     const { a, b } = splitScore(four, matchCtx);
-    const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
+    const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false, date: todayStr() };
     persistCourtMatches({ ...courtMatches, [courtNum]: match });
     if (matchMode === "skill") persistMatchSettings({ skillRankOffset: skillRankOffset + 1 });
     setMatchSeq((n) => n + 1);
@@ -858,7 +858,7 @@ function App() {
     } else {
       ({ a, b } = splitScore(four, matchCtx));
     }
-    const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false };
+    const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false, date: todayStr() };
     persistCourtMatches({ ...courtMatches, [courtNum]: match });
     setMatchSeq((n) => n + 1);
     setManualCourt(null);
@@ -1301,7 +1301,8 @@ function App() {
           )}
 
           {Array.from({ length: numCourts }, (_, i) => i + 1).map((courtNum) => {
-            const m = courtMatches[courtNum];
+            const raw = courtMatches[courtNum];
+            const m = raw && raw.date === todayStr() ? raw : null; // 오늘 날짜가 아닌(예전) 경기는 화면상 비어있는 코트로 취급해요
             const isManualHere = manualCourt === courtNum;
             return (
               <div key={courtNum} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
