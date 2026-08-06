@@ -39,6 +39,18 @@ function bump(map, key) {
 // ctx: { hist, skillOf, mode, todayPairCount, isFirstTimer, isKindOrStrong }
 function splitScore(four, ctx) {
   const { hist, skillOf, mode = "balance", todayPairCount, isFirstTimer, isKindOrStrong } = ctx || {};
+
+  // 🎲 랜덤 모드: 아무 계산 없이 완전 무작위로 팀을 갈라요
+  if (mode === "random") {
+    const splits = [
+      [[four[0], four[1]], [four[2], four[3]]],
+      [[four[0], four[2]], [four[1], four[3]]],
+      [[four[0], four[3]], [four[1], four[2]]],
+    ];
+    const [a, b] = splits[Math.floor(Math.random() * splits.length)];
+    return { s: 0, a, b };
+  }
+
   const splits = [
     [[four[0], four[1]], [four[2], four[3]]],
     [[four[0], four[2]], [four[1], four[3]]],
@@ -46,14 +58,15 @@ function splitScore(four, ctx) {
   ];
   let best = null;
   for (const [a, b] of splits) {
-    // 1) 최근 파트너/상대 겹침 회피 (처음 만나는 사람 우선)
+    // 1) 최근 파트너/상대 겹침 회피 (처음 만나는 사람 우선) — 😊친목 모드에서는 훨씬 더 강하게 반영
+    const historyWeight = mode === "social" ? 3 : 1;
     const historyScore =
-      (hist.partner[pKey(a[0].id, a[1].id)] || 0) * 3 +
-      (hist.partner[pKey(b[0].id, b[1].id)] || 0) * 3 +
-      (hist.opponent[pKey(a[0].id, b[0].id)] || 0) +
-      (hist.opponent[pKey(a[0].id, b[1].id)] || 0) +
-      (hist.opponent[pKey(a[1].id, b[0].id)] || 0) +
-      (hist.opponent[pKey(a[1].id, b[1].id)] || 0);
+      (hist.partner[pKey(a[0].id, a[1].id)] || 0) * 3 * historyWeight +
+      (hist.partner[pKey(b[0].id, b[1].id)] || 0) * 3 * historyWeight +
+      ((hist.opponent[pKey(a[0].id, b[0].id)] || 0) +
+        (hist.opponent[pKey(a[0].id, b[1].id)] || 0) +
+        (hist.opponent[pKey(a[1].id, b[0].id)] || 0) +
+        (hist.opponent[pKey(a[1].id, b[1].id)] || 0)) * historyWeight;
 
     // 2) 오늘 같이 친 횟수 제한 — 2번까지는 약한 페널티, 3번째부터는 강하게 페널티
     let todayPenalty = 0;
@@ -68,11 +81,11 @@ function splitScore(four, ctx) {
       });
     }
 
-    // 3) 실력 밸런스 — 모드에 따라 가중치가 달라져요
+    // 3) 실력 밸런스 — 모드에 따라 가중치가 달라져요 (친목 모드는 실력 거의 신경 안 씀)
     const skillA = skillOf ? (skillOf(a[0].id) + skillOf(a[1].id)) / 2 : 0;
     const skillB = skillOf ? (skillOf(b[0].id) + skillOf(b[1].id)) / 2 : 0;
     const skillGap = Math.abs(skillA - skillB);
-    const skillWeight = mode === "skill" ? 14 : 8; // 실력전: 팀간 실력차를 더 엄격하게
+    const skillWeight = mode === "skill" ? 14 : mode === "social" ? 1 : 8;
     const skillScore = skillGap * skillWeight;
 
     // 4) 균형 모드에서는 왕초보/초보끼리만 뭉치지 않도록, 팀 내부 실력차가 "적당히" 섞이는 조합을 살짝 선호
@@ -84,12 +97,13 @@ function splitScore(four, ctx) {
       mixBonus = -(teamAGap + teamBGap) * 1.5;
     }
 
-    // 5) 첫 참석자는 고수/친절왕과 한 팀이 되도록 살짝 유도
+    // 5) 첫 참석자는 고수/친절왕과 한 팀이 되도록 유도 (😊친목 모드는 훨씬 강하게)
     let firstTimerBonus = 0;
     if (isFirstTimer && isKindOrStrong) {
+      const bonusWeight = mode === "social" ? 3 : 1;
       [[a[0], a[1]], [b[0], b[1]]].forEach(([p1, p2]) => {
-        if (isFirstTimer(p1.id) && isKindOrStrong(p2.id)) firstTimerBonus -= 6;
-        if (isFirstTimer(p2.id) && isKindOrStrong(p1.id)) firstTimerBonus -= 6;
+        if (isFirstTimer(p1.id) && isKindOrStrong(p2.id)) firstTimerBonus -= 6 * bonusWeight;
+        if (isFirstTimer(p2.id) && isKindOrStrong(p1.id)) firstTimerBonus -= 6 * bonusWeight;
       });
     }
 
@@ -219,6 +233,80 @@ function ManualPicker({ waitingPlayers, selected, onToggle, onConfirm, onAutoFil
   );
 }
 
+const MATCH_MODES = [
+  { key: "random", label: "🎲 랜덤", desc: "완전 무작위로 팀을 짜요." },
+  { key: "social", label: "😊 친목", desc: "같이 많이 안 쳐본 사람 위주로, 첫 참석자를 배려해서 짜요." },
+  { key: "balance", label: "⚖️ 균형 (추천)", desc: "실력, 오늘 같이 친 횟수, 첫 참석 여부까지 자동으로 종합해서 가장 공평하게 짜요. 운영자는 신경 안 써도 돼요." },
+  { key: "skill", label: "🏆 실력", desc: "비슷한 실력끼리 묶어서 진짜 승부가 되는 경기를 만들어요." },
+];
+
+// 🏸 운영 추천 — 대기시간/첫참석/반복매칭 같은, 이미 계산되고 있는 신호들을 사람이 읽는 문장으로 보여줘요.
+// "누구 쉬었지? 누구랑 붙이지?" 같은 운영자의 고민을 대신 알려주는 패널이에요.
+function OpsRecommendation({ waitingPlayers, players, matchhistory, matchMode, isFirstTimer, roster }) {
+  if (players.length === 0) return null;
+  const tips = [];
+
+  // 1) 제일 오래 기다린 사람
+  if (waitingPlayers.length > 0) {
+    const longest = waitingPlayers[0];
+    tips.push(`${longest.name}님이 대기열 맨 앞이에요. 다음 코트에 우선 배정돼요.`);
+  }
+
+  // 2) 오늘 첫 참석자
+  const firstTimersToday = players.filter((p) => isFirstTimer(p.id));
+  if (firstTimersToday.length > 0) {
+    tips.push(`${firstTimersToday.map((p) => p.name).join(", ")}님은 오늘 첫 참석이에요. 친절하게 챙겨주세요 🌱`);
+  }
+
+  // 3) 오늘 이미 여러 번 같이 친 조합
+  const today = todayStr();
+  const todayCounts = {};
+  matchhistory.forEach((m) => {
+    if (m.date !== today) return;
+    const all = [...(m.teamA || []), ...(m.teamB || [])];
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const k = pKey(all[i].id, all[j].id);
+        todayCounts[k] = (todayCounts[k] || 0) + 1;
+      }
+    }
+  });
+  Object.keys(todayCounts).forEach((k) => {
+    if (todayCounts[k] < 3) return;
+    const [id1, id2] = k.split("|");
+    const p1 = players.find((p) => p.id === id1);
+    const p2 = players.find((p) => p.id === id2);
+    if (p1 && p2) tips.push(`${p1.name}님과 ${p2.name}님은 오늘 벌써 ${todayCounts[k]}번 같이 쳤어요. 다른 조합을 추천해요.`);
+  });
+
+  // 4) 오늘 모드 추천 (레벨 분포를 보고 판단)
+  if (matchMode !== "social") {
+    const beginnerCount = players.filter((p) => {
+      const m = (roster || []).find((r) => r.id === p.id);
+      return m && ["왕초보", "초보"].includes(m.level);
+    }).length;
+    if (players.length > 0 && beginnerCount / players.length >= 0.6) {
+      tips.push("오늘은 왕초보/초보 비중이 높아요. 😊 친목 모드를 추천해요.");
+    }
+  }
+
+  if (tips.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+      <p className="text-sm font-semibold mb-2">🏸 운영 추천</p>
+      <ul className="space-y-1.5">
+        {tips.map((t, i) => (
+          <li key={i} className="text-xs text-stone-600 flex items-start gap-1.5">
+            <span style={{ color: "#4CAF50" }}>✓</span>
+            <span>{t}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function App() {
   const [tab, setTab] = useState("match");
   const [players, setPlayers] = useState([]);
@@ -322,7 +410,7 @@ function App() {
     const unsub8 = REFS.matchmode.onSnapshot((snap) => {
       const data = snap.data();
       const storedMode = (data && data.mode) || "balance";
-      setMatchMode(storedMode === "skill" ? "skill" : "balance"); // 예전에 저장된 "random" 값은 균형으로 취급
+      setMatchMode(["random", "social", "balance", "skill"].includes(storedMode) ? storedMode : "balance");
       setExcluded((data && data.excluded) || []);
       setWaitStart((data && data.waitStart) || {});
       setLockedCourts((data && data.lockedCourts) || []);
@@ -1063,25 +1151,21 @@ function App() {
               </div>
             </div>
           ) : (
-            <p className="text-xs text-stone-400 text-center">코트 {numCourts}면 운영 중 · {matchMode === "skill" ? "🔥 실력전" : "⚖️ 균형"} 모드</p>
+            <p className="text-xs text-stone-400 text-center">코트 {numCourts}면 운영 중 · {MATCH_MODES.find((m) => m.key === matchMode)?.label || "⚖️ 균형"} 모드</p>
           )}
 
           {adminOn && (
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-            <p className="text-sm font-semibold mb-1">매칭 모드</p>
-            <p className="text-[11px] text-stone-400 mb-2">
-              {matchMode === "balance" && "실력 차이, 오늘 만난 횟수, 첫 참석 여부를 종합해서 가장 공평한 팀을 짜요. (추천)"}
-              {matchMode === "skill" && "참석자를 실력순으로 줄세워 4명씩 묶어 코트를 배정해요. 매번 묶음이 한 칸씩 밀려서 다양한 상대와 만나고, 묶인 4명 안에서도 팀은 항상 실력차가 가장 적은 조합으로 짜요."}
+            <p className="text-sm font-semibold mb-1">🏸 매칭 방식 선택</p>
+            <p className="text-[11px] text-stone-400 mb-3">
+              {MATCH_MODES.find((m) => m.key === matchMode)?.desc}
             </p>
-            <div className="flex gap-1.5">
-              {[
-                { key: "balance", label: "⚖️ 균형" },
-                { key: "skill", label: "🔥 실력전" },
-              ].map((opt) => (
+            <div className="grid grid-cols-2 gap-2">
+              {MATCH_MODES.map((opt) => (
                 <button
                   key={opt.key}
                   onClick={() => adminOn ? persistMatchSettings({ mode: opt.key }) : tryAdminUnlock()}
-                  className={`flex-1 py-2 rounded-xl text-xs font-semibold tap-scale ${matchMode === opt.key ? "text-white" : "bg-stone-50 text-stone-500"}`}
+                  className={`py-3 rounded-xl text-sm font-semibold tap-scale border ${matchMode === opt.key ? "text-white border-transparent" : "bg-stone-50 text-stone-500 border-stone-200"}`}
                   style={matchMode === opt.key ? { backgroundColor: "#4CAF50" } : {}}
                 >
                   {opt.label}
@@ -1172,6 +1256,30 @@ function App() {
 
       {tab === "match" && (
         <section className="px-5 mt-5 space-y-4">
+          <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: "#4CAF50" }}>
+            <p className="text-[11px] uppercase tracking-widest text-white/80 mb-2">🏸 오늘 운영</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[11px] text-white/70">오늘 참석</p>
+                <p className="headfont text-2xl">{players.length}<span className="text-sm font-normal">명</span></p>
+              </div>
+              <div>
+                <p className="text-[11px] text-white/70">추천 코트 수</p>
+                <p className="headfont text-2xl">{Math.max(1, Math.floor(players.length / 4)) || 0}<span className="text-sm font-normal">면</span></p>
+              </div>
+              <div>
+                <p className="text-[11px] text-white/70">현재 대기</p>
+                <p className="headfont text-2xl">{waitingPlayers.length}<span className="text-sm font-normal">명</span></p>
+              </div>
+              <div>
+                <p className="text-[11px] text-white/70">다음 추천</p>
+                <p className="text-sm font-semibold leading-snug">{waitingPlayers.slice(0, 4).map((p) => p.name).join(", ") || "-"}</p>
+              </div>
+            </div>
+          </div>
+
+          {adminOn && <OpsRecommendation waitingPlayers={waitingPlayers} players={players} matchhistory={matchhistory} matchMode={matchMode} isFirstTimer={isFirstTimer} roster={roster} />}
+
           {waitingPlayers.length > 0 && (
             <div className="bg-stone-100 rounded-2xl p-4 border border-stone-200">
               <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">⏳ 대기 중 ({waitingPlayers.length}명)</p>
@@ -1219,10 +1327,17 @@ function App() {
                       <p className="text-xs text-stone-400">이 코트는 비어있어요. 곧 다음 경기가 배정될 거예요.</p>
                     ) : !isManualHere ? (
                       <>
-                        <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
+                        {waitingPlayers.length < 4 ? (
+                          <p className="text-xs font-medium" style={{ color: "#B98900" }}>
+                            ⚠️ {4 - waitingPlayers.length}명이 부족해요. (대기 {waitingPlayers.length}명 / 4명 필요)
+                          </p>
+                        ) : (
+                          <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 중인 인원으로 바로 시작할 수 있어요.</p>
+                        )}
                         <button
                           onClick={() => startMatchOnCourt(courtNum)}
-                          className="w-full rounded-xl py-3 font-semibold text-sm bg-[#4CAF50] text-white active:scale-[0.98] transition"
+                          disabled={waitingPlayers.length < 4}
+                          className="w-full rounded-xl py-3 font-semibold text-sm bg-[#4CAF50] text-white active:scale-[0.98] transition disabled:bg-stone-200 disabled:text-stone-400"
                         >
                           🔀 이 코트 경기 시작
                         </button>
@@ -1304,9 +1419,15 @@ function App() {
                       </div>
                     ) : !isManualHere ? (
                       <div className="px-4 pb-4 space-y-2">
+                        {waitingPlayers.length < 4 && (
+                          <p className="text-xs font-medium text-center" style={{ color: "#B98900" }}>
+                            ⚠️ {4 - waitingPlayers.length}명이 부족해요. (대기 {waitingPlayers.length}명 / 4명 필요)
+                          </p>
+                        )}
                         <button
                           onClick={() => startMatchOnCourt(courtNum)}
-                          className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white rounded-xl"
+                          disabled={waitingPlayers.length < 4}
+                          className="w-full py-2.5 text-sm font-semibold bg-[#4CAF50] text-white rounded-xl disabled:bg-stone-200 disabled:text-stone-400"
                         >
                           🔀 이 코트 다음 경기 시작
                         </button>
