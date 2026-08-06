@@ -7,7 +7,13 @@ function uid() {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // 주의: toISOString()은 UTC 기준이라 한국 시간 자정~오전 9시 사이엔 날짜가 하루 밀려서 나오는 버그가 있었어요.
+  // 그래서 로컬(내 폰) 시간 기준으로 직접 조립해요.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function todayMD() {
