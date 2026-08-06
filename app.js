@@ -340,7 +340,7 @@ function MemberProfileModal({ member, checkinlog, allSessionDates, scheduleItems
       const url = await uploadToCloudinary(file);
       onSave({ photoUrl: url });
     } catch (err) {
-      window.alert("사진 업로드에 실패했어요. (" + (err.message || "") + ")");
+      appAlert("사진 업로드에 실패했어요. (" + (err.message || "") + ")");
     }
     setUploading(false);
   }
@@ -610,15 +610,15 @@ async function uploadToCloudinary(file) {
 function useAdmin(isOfficer) {
   const [pinOn, setPinOn] = useState(() => localStorage.getItem("bm_admin") === "1");
   const adminOn = pinOn || !!isOfficer;
-  function tryUnlock(cb) {
+  async function tryUnlock(cb) {
     if (adminOn) { if (cb) cb(); return; }
-    const pin = window.prompt("관리자 비밀번호를 입력하세요");
+    const pin = await appPrompt("관리자 비밀번호를 입력하세요");
     if (pin === window.ADMIN_PIN) {
       localStorage.setItem("bm_admin", "1");
       setPinOn(true);
       if (cb) cb();
     } else if (pin !== null) {
-      window.alert("비밀번호가 틀렸어요.");
+      appAlert("비밀번호가 틀렸어요.");
     }
   }
   function lock() {
