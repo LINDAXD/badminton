@@ -150,6 +150,15 @@ function App() {
     return () => unsub();
   }, []);
 
+  const [meetingEndedDate, setMeetingEndedDate] = React.useState(null);
+  React.useEffect(() => {
+    const unsub = REFS.matchmode.onSnapshot((snap) => {
+      const data = snap.data();
+      setMeetingEndedDate((data && data.meetingEndedDate) || null);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
   React.useEffect(() => {
     const unsub = REFS.pending.onSnapshot((snap) => {
       const data = snap.data();
@@ -350,6 +359,7 @@ function App() {
       {/* 오늘의 소식 (생일/신규회원/이달의 수상자를 한 줄씩 돌아가며 보여줘서 안 정신없게) */}
       {(() => {
         const items = [];
+        if (meetingEndedDate === todayStr()) items.push({ emoji: "🏁", text: "오늘 모임이 종료됐어요. 아직 투표 안 하셨다면 투표해주세요!" });
         if (birthdayMembers.length > 0) items.push({ emoji: "🎂", text: `오늘은 ${birthdayMembers.map((m) => m.name).join(", ")}님의 생일이에요!` });
         if (newMembersToday.length > 0) items.push({ emoji: "🎉", text: `${newMembersToday.map((m) => m.name).join(", ")}님, 버디에 오신 걸 환영해요!` });
         window.VOTE_CATEGORIES.forEach((cat) => {

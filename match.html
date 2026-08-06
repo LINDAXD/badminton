@@ -321,6 +321,7 @@ function App() {
   const [copyMsg, setCopyMsg] = useState("");
   const backupInputRef = useRef(null);
   const [numCourts, setNumCourts] = useState(2);
+  const [meetingEndedDate, setMeetingEndedDate] = useState(null);
   const [hist, setHist] = useState(buildHistory());
   const [courtMatches, setCourtMatches] = useState({}); // { [courtNumber]: match | null }
   const [matchSeq, setMatchSeq] = useState(0);
@@ -416,6 +417,7 @@ function App() {
       setLockedCourts((data && data.lockedCourts) || []);
       setSkillRankOffset((data && data.skillRankOffset) || 0);
       if (data && data.numCourts) setNumCourts(data.numCourts);
+      setMeetingEndedDate((data && data.meetingEndedDate) || null);
     }, () => {});
 
     const unsub9 = REFS.kindvotes.onSnapshot((snap) => {
@@ -451,6 +453,7 @@ function App() {
       lockedCourts: patch.lockedCourts !== undefined ? patch.lockedCourts : lockedCourts,
       skillRankOffset: patch.skillRankOffset !== undefined ? patch.skillRankOffset : skillRankOffset,
       numCourts: patch.numCourts !== undefined ? patch.numCourts : numCourts,
+      meetingEndedDate: patch.meetingEndedDate !== undefined ? patch.meetingEndedDate : meetingEndedDate,
     };
     setMatchMode(next.mode);
     setExcluded(next.excluded);
@@ -458,7 +461,19 @@ function App() {
     setLockedCourts(next.lockedCourts);
     setSkillRankOffset(next.skillRankOffset);
     setNumCourts(next.numCourts);
+    setMeetingEndedDate(next.meetingEndedDate);
     REFS.matchmode.set(next).catch(() => {});
+  }
+
+  const meetingEndedToday = meetingEndedDate === todayStr();
+  async function endTodayMeeting() {
+    if (!adminOn) return;
+    if (!(await appConfirm("오늘 모임을 마칠까요? 이후 새 경기 시작이 막히고, 다들 투표하라는 안내가 떠요."))) return;
+    persistMatchSettings({ meetingEndedDate: todayStr() });
+  }
+  function reopenTodayMeeting() {
+    if (!adminOn) return;
+    persistMatchSettings({ meetingEndedDate: null });
   }
 
   function markWaiting(ids) {
@@ -798,6 +813,10 @@ function App() {
   function startMatchOnCourt(courtNum) {
     if (!adminOn) {
       tryAdminUnlock();
+      return;
+    }
+    if (meetingEndedToday) {
+      appAlert("오늘 모임이 이미 종료됐어요. 다시 시작하려면 먼저 '모임 다시 열기'를 눌러주세요.");
       return;
     }
     if (lockedCourts.includes(courtNum)) {
@@ -1259,8 +1278,28 @@ function App() {
 
       {tab === "match" && (
         <section className="px-5 mt-5 space-y-4">
+          {meetingEndedToday && (
+            <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
+              <p className="text-sm font-bold" style={{ color: "#B98900" }}>🏁 오늘 모임이 종료됐어요</p>
+              <p className="text-xs text-stone-500 mt-1">새 경기는 시작할 수 없어요. 아직 투표 안 하셨다면 잊지 말고 투표해주세요!</p>
+              <a href="./vote.html" className="inline-block mt-2 text-xs font-semibold px-4 py-2 rounded-full text-white" style={{ backgroundColor: "#4CAF50" }}>🗳️ 투표하러 가기</a>
+              {adminOn && (
+                <button onClick={reopenTodayMeeting} className="block mx-auto mt-2 text-[11px] text-stone-400 underline underline-offset-2">
+                  모임 다시 열기
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: "#4CAF50" }}>
-            <p className="text-[11px] uppercase tracking-widest text-white/80 mb-2">🏸 오늘 운영</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] uppercase tracking-widest text-white/80">🏸 오늘 운영</p>
+              {adminOn && !meetingEndedToday && (
+                <button onClick={endTodayMeeting} className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/20 tap-scale">
+                  🏁 오늘 모임 마치기
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-[11px] text-white/70">오늘 참석</p>
@@ -1325,7 +1364,9 @@ function App() {
 
                 {!m ? (
                   <div className="p-5 text-center space-y-2">
-                    {lockedCourts.includes(courtNum) ? (
+                    {meetingEndedToday ? (
+                      <p className="text-xs text-stone-400">🏁 오늘 모임이 종료됐어요.</p>
+                    ) : lockedCourts.includes(courtNum) ? (
                       <p className="text-xs text-stone-400">🔒 이 코트는 잠겨있어요.</p>
                     ) : !adminOn ? (
                       <p className="text-xs text-stone-400">이 코트는 비어있어요. 곧 다음 경기가 배정될 거예요.</p>
@@ -1416,6 +1457,10 @@ function App() {
                             🔀 팀 다시 섞기
                           </button>
                         )}
+                      </div>
+                    ) : meetingEndedToday ? (
+                      <div className="px-4 pb-4">
+                        <p className="text-xs text-stone-400 text-center">🏁 오늘 모임이 종료됐어요.</p>
                       </div>
                     ) : !adminOn ? (
                       <div className="px-4 pb-4">
