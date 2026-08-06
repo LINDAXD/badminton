@@ -4,6 +4,8 @@ body {
   margin: 0;
   background: #FFFFFF;
   -webkit-tap-highlight-color: transparent;
+  word-break: keep-all; /* 한글 단어 중간에서 어색하게 줄바꿈되는 것 방지 */
+  overflow-wrap: break-word;
 }
 
 .headfont {

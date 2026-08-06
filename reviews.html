@@ -20,33 +20,36 @@
 <script type="text/babel" src="./app.js"></script>
 <script type="text/babel">
 
-function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName }) {
-  const likedKey = `bm_reviewliked_${r.id}`;
-  const [liked, setLiked] = React.useState(() => localStorage.getItem(likedKey) === "1");
+function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName, myId }) {
+  const liked = !!(myId && (r.likes || []).includes(myId));
   const likeCount = (r.likes || []).length;
   const photos = photosOf(r);
   const [showComments, setShowComments] = React.useState(false);
   const [commentText, setCommentText] = React.useState("");
+  const [replyingTo, setReplyingTo] = React.useState(null);
+  const [replyText, setReplyText] = React.useState("");
 
   function toggleLike() {
+    if (!myId) return;
     REFS.reviews.get().then((snap) => {
       const data = snap.data() || {};
       const items = data.items || [];
       const next = items.map((it) => {
         if (it.id !== r.id) return it;
         const likes = it.likes || [];
-        return liked ? { ...it, likes: likes.slice(1) } : { ...it, likes: [...likes, uid()] };
+        // 본인(myId) 것만 정확히 빼거나 더해요 — 이전엔 배열 맨 앞을 무조건 지워서 엉뚱한 사람 좋아요가 사라지는 버그가 있었어요.
+        return likes.includes(myId)
+          ? { ...it, likes: likes.filter((id) => id !== myId) }
+          : { ...it, likes: [...likes, myId] };
       });
       REFS.reviews.set({ items: next }).catch(() => {});
     });
-    if (liked) { localStorage.removeItem(likedKey); setLiked(false); }
-    else { localStorage.setItem(likedKey, "1"); setLiked(true); }
   }
 
   function addComment() {
     const text = commentText.trim();
     if (!text) return;
-    const comment = { id: uid(), name: myName || "손님", text, date: todayStr() };
+    const comment = { id: uid(), name: myName || "손님", text, date: todayStr(), replies: [] };
     REFS.reviews.get().then((snap) => {
       const data = snap.data() || {};
       const items = data.items || [];
@@ -56,22 +59,48 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName }) {
     setCommentText("");
   }
 
+  function addReply(commentId) {
+    const text = replyText.trim();
+    if (!text) return;
+    const reply = { id: uid(), name: myName || "손님", text, date: todayStr() };
+    REFS.reviews.get().then((snap) => {
+      const data = snap.data() || {};
+      const items = data.items || [];
+      const next = items.map((it) => {
+        if (it.id !== r.id) return it;
+        const comments = (it.comments || []).map((c) =>
+          c.id === commentId ? { ...c, replies: [...(c.replies || []), reply] } : c
+        );
+        return { ...it, comments };
+      });
+      REFS.reviews.set({ items: next }).catch(() => {});
+    });
+    setReplyText("");
+    setReplyingTo(null);
+  }
+
   return (
     <li className="rise-in bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
       {photos.length > 0 && (
-        <button onClick={() => onOpenPhoto(r, 0)} className="relative block w-full">
-          <img src={photos[0]} alt="후기 사진" className="w-full max-h-80 object-cover" />
+        <div>
+          <button onClick={() => onOpenPhoto(r, 0)} className="relative block w-full">
+            <img src={photos[0]} alt="후기 사진" className="w-full max-h-80 object-cover" />
+            {photos.length >= 3 && (
+              <span className="absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#4CAF50" }}>
+                ✨ 인기 후기
+              </span>
+            )}
+          </button>
           {photos.length > 1 && (
-            <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[11px] px-2 py-0.5 rounded-full">
-              📷 {photos.length}장
-            </span>
+            <div className="grid gap-0.5 p-0.5" style={{ gridTemplateColumns: `repeat(${Math.min(photos.length - 1, 5)}, 1fr)` }}>
+              {photos.slice(1).map((url, i) => (
+                <button key={i} onClick={() => onOpenPhoto(r, i + 1)} className="aspect-square overflow-hidden">
+                  <img src={url} alt="후기 사진" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
           )}
-          {photos.length >= 3 && (
-            <span className="absolute top-2 left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#4CAF50" }}>
-              ✨ 인기 후기
-            </span>
-          )}
-        </button>
+        </div>
       )}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
@@ -96,11 +125,41 @@ function ReviewCard({ r, canDelete, onRemove, onOpenPhoto, myName }) {
           {(r.comments || []).length === 0 ? (
             <p className="text-xs text-stone-400 mb-2">아직 댓글이 없어요.</p>
           ) : (
-            <ul className="space-y-1.5 mb-2">
+            <ul className="space-y-2.5 mb-2">
               {r.comments.map((c) => (
-                <li key={c.id} className="text-xs">
-                  <span className="font-semibold text-stone-700">{c.name}</span>{" "}
-                  <span className="text-stone-500">{c.text}</span>
+                <li key={c.id}>
+                  <p className="text-xs">
+                    <span className="font-semibold text-stone-700">{c.name}</span>{" "}
+                    <span className="text-stone-500">{c.text}</span>
+                  </p>
+                  <button onClick={() => setReplyingTo(replyingTo === c.id ? null : c.id)} className="text-[11px] text-stone-400 mt-0.5">
+                    답글
+                  </button>
+
+                  {(c.replies || []).length > 0 && (
+                    <ul className="mt-1.5 ml-4 space-y-1 border-l-2 border-stone-200 pl-2.5">
+                      {c.replies.map((rp) => (
+                        <li key={rp.id} className="text-xs">
+                          <span className="font-semibold text-stone-700">{rp.name}</span>{" "}
+                          <span className="text-stone-500">{rp.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {replyingTo === c.id && (
+                    <div className="flex gap-2 mt-1.5 ml-4">
+                      <input
+                        autoFocus
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addReply(c.id)}
+                        placeholder="답글을 남겨보세요"
+                        className="flex-1 rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs"
+                      />
+                      <button onClick={() => addReply(c.id)} className="text-white text-xs px-3 rounded-lg" style={{ backgroundColor: "#4CAF50" }}>등록</button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -297,7 +356,7 @@ function App() {
         ) : viewMode === "feed" ? (
           <ul className="space-y-3">
             {reviews.map((r) => (
-              <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} />
+              <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} myId={myId} />
             ))}
           </ul>
         ) : viewMode === "date" ? (
@@ -307,7 +366,7 @@ function App() {
                 <p className="text-xs font-bold text-stone-500 mb-2">📅 {fmtDate(d)} ({byDate[d].length})</p>
                 <ul className="space-y-3">
                   {byDate[d].map((r) => (
-                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} />
+                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} myId={myId} />
                   ))}
                 </ul>
               </div>
@@ -320,7 +379,7 @@ function App() {
                 <p className="text-xs font-bold text-stone-500 mb-2">🙋 {a} ({byAuthor[a].length})</p>
                 <ul className="space-y-3">
                   {byAuthor[a].map((r) => (
-                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} />
+                    <ReviewCard key={r.id} r={r} canDelete={adminOn || r.authorId === myId} onRemove={removeReview} onOpenPhoto={openPhoto} myName={myName} myId={myId} />
                   ))}
                 </ul>
               </div>

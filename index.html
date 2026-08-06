@@ -80,21 +80,30 @@ function RotatingBanner({ items }) {
   const [idx, setIdx] = React.useState(0);
   React.useEffect(() => {
     if (items.length <= 1) return;
-    const t = setInterval(() => setIdx((i) => (i + 1) % items.length), 3500);
+    const t = setInterval(() => setIdx((i) => (i + 1) % items.length), 5000);
     return () => clearInterval(t);
-  }, [items.length]);
+  }, [items.length, idx]);
   if (items.length === 0) return null;
   const it = items[idx % items.length];
+  const go = (delta) => setIdx((i) => (i + delta + items.length) % items.length);
   return (
     <section className="px-5 pt-3 max-w-2xl mx-auto">
       <div className="rise-in rounded-2xl p-3.5" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
-        <p className="text-sm font-bold text-center" style={{ color: "#B98900" }}>
-          {it.emoji} {it.text}
-        </p>
+        <div className="flex items-center gap-2">
+          {items.length > 1 && (
+            <button onClick={() => go(-1)} className="shrink-0 text-lg px-1 tap-scale" style={{ color: "#D9BF6B" }}>‹</button>
+          )}
+          <p className="text-sm font-bold text-center flex-1" style={{ color: "#B98900" }}>
+            {it.emoji} {it.text}
+          </p>
+          {items.length > 1 && (
+            <button onClick={() => go(1)} className="shrink-0 text-lg px-1 tap-scale" style={{ color: "#D9BF6B" }}>›</button>
+          )}
+        </div>
         {items.length > 1 && (
-          <div className="flex items-center justify-center gap-1 mt-2">
+          <div className="flex items-center justify-center gap-1.5 mt-2">
             {items.map((_, i) => (
-              <span key={i} className="rounded-full" style={{ width: 5, height: 5, backgroundColor: i === idx ? "#B98900" : "#F0E0A8" }} />
+              <button key={i} onClick={() => setIdx(i)} className="rounded-full tap-scale" style={{ width: 6, height: 6, backgroundColor: i === idx ? "#B98900" : "#F0E0A8" }} />
             ))}
           </div>
         )}
