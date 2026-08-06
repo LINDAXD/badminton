@@ -28,8 +28,8 @@ function NoticeCard({ n, adminOn, myId, myName, onRemove, onDeletePhoto }) {
 
   function toggleLike() {
     if (!myId) return;
-    const items_ref = REFS.notices;
-    items_ref.get().then((snap) => {
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.notices);
       const data = snap.data() || {};
       const items = data.items || [];
       const next = items.map((it) => {
@@ -39,8 +39,8 @@ function NoticeCard({ n, adminOn, myId, myName, onRemove, onDeletePhoto }) {
           ? { ...it, likes: likes.filter((id) => id !== myId) }
           : { ...it, likes: [...likes, myId] };
       });
-      items_ref.set({ items: next }).catch(() => {});
-    });
+      tx.set(REFS.notices, { items: next });
+    }).catch(() => {});
   }
 
   function addComment() {
@@ -48,12 +48,13 @@ function NoticeCard({ n, adminOn, myId, myName, onRemove, onDeletePhoto }) {
     const text = commentText.trim();
     if (!text) return;
     const comment = { id: uid(), name: myName || "손님", text, date: todayStr() };
-    REFS.notices.get().then((snap) => {
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.notices);
       const data = snap.data() || {};
       const items = data.items || [];
       const next = items.map((it) => it.id === n.id ? { ...it, comments: [...(it.comments || []), comment] } : it);
-      REFS.notices.set({ items: next }).catch(() => {});
-    });
+      tx.set(REFS.notices, { items: next });
+    }).catch(() => {});
     setCommentText("");
   }
 

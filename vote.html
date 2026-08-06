@@ -78,12 +78,18 @@ function App() {
   function castVote(category, votedForId) {
     if (!myId || !iAttendedToday) return;
     if (hasVoted(category)) return;
-    const dayVotes = { ...(dailyvotesDoc[today] || {}) };
-    const catVotes = [...(dayVotes[category] || []), { voterId: myId, votedForId: votedForId || null }];
-    dayVotes[category] = catVotes;
-    const next = { ...dailyvotesDoc, [today]: dayVotes };
-    setDailyvotesDoc(next);
-    REFS.dailyvotes.set({ data: next }).catch(() => {});
+    // 트랜잭션으로 처리 — 경기 끝나고 여러 명이 한꺼번에 투표해도, 서로 덮어써서 표가 사라지지 않게 해요.
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.dailyvotes);
+      const data = snap.data() || {};
+      const allVotes = data.data || {};
+      const dayVotes = { ...(allVotes[today] || {}) };
+      const catVotes = dayVotes[category] || [];
+      if (catVotes.some((v) => v.voterId === myId)) return; // 이미 투표했으면 중복 방지
+      dayVotes[category] = [...catVotes, { voterId: myId, votedForId: votedForId || null }];
+      const next = { ...allVotes, [today]: dayVotes };
+      tx.set(REFS.dailyvotes, { data: next });
+    }).catch(() => {});
   }
 
   function renderCategory(cat, candidateList) {

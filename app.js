@@ -770,24 +770,28 @@ function useRoster() {
 }
 
 // ---------- 출석 이력 기록 (출석왕 계산용, 하루 1회만 기록) ----------
+// 다들 거의 동시에 참석 체크를 하는 순간이라 충돌 위험이 커요 — 트랜잭션으로 안전하게 처리해요.
 function logAttendance(memberId) {
   if (!memberId) return;
   const today = todayStr();
-  REFS.checkinlog.get().then((snap) => {
+  db.runTransaction(async (tx) => {
+    const snap = await tx.get(REFS.checkinlog);
     const data = snap.data() || {};
     const items = data.items || [];
     const already = items.some((it) => it.memberId === memberId && it.date === today);
     if (already) return;
-    REFS.checkinlog.set({ items: [...items, { id: uid(), memberId, date: today }] }).catch(() => {});
+    tx.set(REFS.checkinlog, { items: [...items, { id: uid(), memberId, date: today }] });
   }).catch(() => {});
 }
 
 // ---------- 경기 결과 기록 (내 정보 > 경기 기록용) ----------
+// 여러 코트가 거의 동시에 경기를 끝내도 서로 기록이 안 사라지게, 트랜잭션으로 안전하게 추가해요.
 function logMatchResult(record) {
-  REFS.matchhistory.get().then((snap) => {
+  db.runTransaction(async (tx) => {
+    const snap = await tx.get(REFS.matchhistory);
     const data = snap.data() || {};
     const items = data.items || [];
-    REFS.matchhistory.set({ items: [{ id: uid(), date: todayStr(), ...record }, ...items] }).catch(() => {});
+    tx.set(REFS.matchhistory, { items: [{ id: uid(), date: todayStr(), ...record }, ...items] });
   }).catch(() => {});
 }
 
