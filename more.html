@@ -341,18 +341,16 @@ function App() {
           });
         } catch (e) {}
       } else if (status !== "in" && wasIn) {
-        // 참석이었다가 취소(미정/불참)로 바꾸면 참석 체크도 같이 풀리고, 노쇼 1회로 자동 기록돼요
+        // 참석이었다가 취소(미정/불참)로 바꾸면 참석 체크도 같이 풀려요. 노쇼는 여기서 자동으로 안 매겨요 —
+        // 관리자가 상황 보고 직접 판단해서 부여하는 게 더 정확해서요 (회원 프로필 카드에서 부여 가능).
         try {
           await db.runTransaction(async (tx) => {
             const checkinSnap = await tx.get(REFS.checkin);
             const nextRsvp = { ...((checkinSnap.data() || {}).data || {}), [myId]: "out" };
             tx.set(REFS.checkin, { data: nextRsvp });
-            const noshowSnap = await tx.get(REFS.noshows);
-            const items = (noshowSnap.data() || {}).items || [];
-            tx.set(REFS.noshows, { items: [...items, { id: uid(), memberId: myId, date: todayStr(), source: "auto" }] });
           });
         } catch (e) {}
-        appAlert("참석을 취소하셨어요. 노쇼 1회로 자동 기록돼요.");
+        appAlert("참석을 취소하셨어요.");
       }
     }
   }

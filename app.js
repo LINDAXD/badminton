@@ -257,28 +257,10 @@ function computeAttendanceStats(memberId, checkinlog, allSessionDates) {
 }
 
 // 노쇼: 일정에 "✅참석"으로 RSVP하고(정원 안에 들었는데도) 실제로는 체크인 기록이 없는 경우
+// 노쇼는 관리자가 직접 부여한 것만 세요 — 자동 감지는 오히려 헷갈리고 부정확할 수 있어서, 상황을 아는
+// 관리자가 판단해서 회원 프로필 카드에서 부여하는 방식 하나로만 운영해요.
 function computeNoShowCount(memberId, scheduleItems, checkinlog, noshows) {
-  const today = todayStr();
-  const attendedDates = new Set(checkinlog.filter((c) => c.memberId === memberId).map((c) => c.date));
-  let count = 0;
-  (scheduleItems || []).forEach((s) => {
-    if (!s.date || s.date >= today) return; // 지난 일정만 카운트
-    const rsvpList = s.rsvp || [];
-    const mine = rsvpList.find((r) => r.id === memberId);
-    if (!mine || mine.status !== "in") return;
-    if (s.capacity) {
-      const confirmedIds = rsvpList
-        .filter((r) => r.status === "in")
-        .sort((a, b) => a.at - b.at)
-        .slice(0, s.capacity)
-        .map((r) => r.id);
-      if (!confirmedIds.includes(memberId)) return; // 대기자였으면 노쇼로 안 셈
-    }
-    if (!attendedDates.has(s.date)) count++;
-  });
-  // 참석 체크했다가 취소한 경우(자동), 또는 관리자가 직접 준 노쇼 기록
-  count += (noshows || []).filter((n) => n.memberId === memberId).length;
-  return count;
+  return (noshows || []).filter((n) => n.memberId === memberId).length;
 }
 
 function earnedBadges(member, stats) {
