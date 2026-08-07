@@ -15,8 +15,17 @@ window.db = firebase.firestore();
 
 // 익명 로그인 — Firestore 보안 규칙에서 "로그인된 사용자만 읽기/쓰기 가능"하게 제한할 수 있도록 해줘요.
 // 회원 이름/비밀번호 방식과는 별개로, 앱이 열리면 자동으로(팝업 없이) 조용히 한 번 로그인돼요.
+// window.authReadyPromise: 각 페이지는 이 약속이 끝날 때까지 화면을 안 띄우고 기다려요.
+// 이게 없으면, "회원 명단 불러오기"가 "익명 로그인 완료"보다 미세하게 먼저 실행돼서 명단이 텅 빈 채로
+// 처리되는 경우가 있었어요(특히 시크릿 탭처럼 완전히 새로 시작할 때) — 그 문제를 원천적으로 막는 거예요.
+let _resolveAuthReady;
+window.authReadyPromise = new Promise((resolve) => { _resolveAuthReady = resolve; });
+firebase.auth().onAuthStateChanged((user) => {
+  if (user) _resolveAuthReady();
+});
 firebase.auth().signInAnonymously().catch((err) => {
   console.error("익명 로그인 실패:", err);
+  _resolveAuthReady(); // 인증이 실패해도 화면이 무한정 멈춰있지 않도록
 });
 
 // ---- Cloudinary 설정 (사진 업로드용) ----
