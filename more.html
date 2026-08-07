@@ -52,6 +52,7 @@ const RESET_CATEGORIES = [
   { key: "votes", label: "🗳️ 투표 기록 (월간 투표, 또치고싶어요)", refs: ["dailyvotes", "kindvotes"], shape: "mixed" },
   { key: "noshow", label: "🚫 노쇼 기록", refs: ["noshows"], shape: "items" },
   { key: "guests", label: "🙋 게스트 명단", refs: ["guestlist"], shape: "items" },
+  { key: "shuttlecock", label: "🏸 셔틀콕 제출/소모 기록", refs: ["shuttlecock"], shape: "mixed" },
   { key: "roster", label: "⚠️ 회원 명단 (가입 승인 대기 포함) — 전원 로그아웃되고 다시 가입해야 해요!", refs: ["roster", "pending"], shape: "mixed" },
 ];
 
@@ -85,7 +86,7 @@ function DataResetPanel() {
           if (!ref) continue;
           if (refKey === "checkin") {
             await ref.set({ data: {} });
-          } else if (refKey === "dailyvotes") {
+          } else if (refKey === "dailyvotes" || refKey === "shuttlecock") {
             await ref.set({ data: {} });
           } else if (refKey === "roster") {
             await ref.set({ members: [] });

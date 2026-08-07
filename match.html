@@ -243,6 +243,130 @@ const MATCH_MODES = [
 
 // 🏸 운영 추천 — 대기시간/첫참석/반복매칭 같은, 이미 계산되고 있는 신호들을 사람이 읽는 문장으로 보여줘요.
 // "누구 쉬었지? 누구랑 붙이지?" 같은 운영자의 고민을 대신 알려주는 패널이에요.
+// 🏸 셔틀콕 제출 현황 — 참석이랑은 별개로, 오늘 셔틀콕 냈는지 체크리스트예요.
+// 본인 이름은 본인이 눌러서 체크하고, 관리자는 다른 사람 것도 대신 눌러줄 수 있어요.
+// 🏸 셔틀콕 관리 — 참석이랑은 별개예요.
+// 참석자별로 몇 개 냈는지 개수로 기록하고(첫 참석자는 면제), 게임 끝나고 멀쩡한 콕 개수를 입력하면 오늘 소모량이 자동 계산돼요.
+function ShuttlecockPanel({ players, myId, adminOn, isFirstTimer }) {
+  const [dayData, setDayData] = useState({ submissions: {}, remaining: null });
+  useEffect(() => {
+    const unsub = REFS.shuttlecock.onSnapshot((snap) => {
+      const data = snap.data();
+      const all = (data && data.data) || {};
+      setDayData(all[todayStr()] || { submissions: {}, remaining: null });
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  // 다들 도착하자마자 거의 동시에 콕 개수를 +/- 누르는 상황이라, 트랜잭션 안에서 매번 최신 값을 다시 읽고
+  // 그 위에 "이 사람 개수만" 얹어써요 — 그래야 두 사람이 동시에 서로 다른 사람 개수를 바꿔도 안 씹혀요.
+  function setCount(id, count) {
+    if (!(adminOn || id === myId)) return;
+    const n = Math.max(0, count);
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.shuttlecock);
+      const data = snap.data() || {};
+      const all = data.data || {};
+      const today = all[todayStr()] || { submissions: {}, remaining: null };
+      const nextDay = { ...today, submissions: { ...today.submissions, [id]: n } };
+      tx.set(REFS.shuttlecock, { data: { ...all, [todayStr()]: nextDay } });
+    }).catch(() => {});
+  }
+
+  function setRemaining(val) {
+    if (!adminOn) return;
+    const n = val === "" ? null : Math.max(0, parseInt(val, 10) || 0);
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.shuttlecock);
+      const data = snap.data() || {};
+      const all = data.data || {};
+      const today = all[todayStr()] || { submissions: {}, remaining: null };
+      const nextDay = { ...today, remaining: n };
+      tx.set(REFS.shuttlecock, { data: { ...all, [todayStr()]: nextDay } });
+    }).catch(() => {});
+  }
+
+  if (players.length === 0) return null;
+
+  const eligible = players.filter((p) => !isFirstTimer(p.id));
+  const exempt = players.filter((p) => isFirstTimer(p.id));
+  const submissions = dayData.submissions || {};
+  const totalReceived = eligible.reduce((sum, p) => sum + (submissions[p.id] || 0), 0);
+  const notSubmittedCount = eligible.filter((p) => !submissions[p.id]).length;
+  const consumed = dayData.remaining != null ? totalReceived - dayData.remaining : null;
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+      <p className="text-sm font-semibold mb-1">🏸 셔틀콕 관리</p>
+      <p className="text-[11px] text-stone-400 mb-3">참석자마다 몇 개 냈는지 적어주세요. 첫 참석자는 자동으로 면제돼요.</p>
+
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="bg-stone-50 rounded-xl p-3">
+          <p className="text-[11px] text-stone-400">오늘 총 수령</p>
+          <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{totalReceived}<span className="text-xs text-stone-400 font-normal">개</span></p>
+        </div>
+        <div className="bg-stone-50 rounded-xl p-3">
+          <p className="text-[11px] text-stone-400">미제출</p>
+          <p className="headfont text-xl text-stone-800">{notSubmittedCount}<span className="text-xs text-stone-400 font-normal">명</span></p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5 mb-3">
+        {eligible.map((p) => {
+          const canEdit = adminOn || p.id === myId;
+          const count = submissions[p.id] || 0;
+          return (
+            <div key={p.id} className="flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2">
+              <span className={`text-xs ${count > 0 ? "text-stone-700 font-medium" : "text-stone-400"}`}>{count > 0 ? "🏸 " : ""}{p.name}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCount(p.id, count - 1)}
+                  disabled={!canEdit || count <= 0}
+                  className="w-6 h-6 rounded-full bg-white border border-stone-200 text-stone-500 flex items-center justify-center disabled:opacity-40"
+                >−</button>
+                <span className="scorefont text-sm w-4 text-center">{count}</span>
+                <button
+                  onClick={() => setCount(p.id, count + 1)}
+                  disabled={!canEdit}
+                  className="w-6 h-6 rounded-full bg-white border border-stone-200 text-stone-500 flex items-center justify-center disabled:opacity-40"
+                >+</button>
+              </div>
+            </div>
+          );
+        })}
+        {exempt.map((p) => (
+          <div key={p.id} className="flex items-center justify-between bg-stone-50 rounded-xl px-3 py-2 opacity-60">
+            <span className="text-xs text-stone-400">🌱 {p.name}</span>
+            <span className="text-[10px] text-stone-400">첫 참석 (면제)</span>
+          </div>
+        ))}
+      </div>
+
+      {adminOn && (
+        <div className="pt-3 border-t border-stone-100">
+          <p className="text-[11px] text-stone-500 mb-1.5">🛠️ 관리자: 게임 종료 후 멀쩡한 콕 개수</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={dayData.remaining == null ? "" : dayData.remaining}
+              onChange={(e) => setRemaining(e.target.value)}
+              placeholder="숫자 입력"
+              className="flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+            />
+            {consumed != null && (
+              <span className="text-xs font-semibold shrink-0" style={{ color: consumed > 0 ? "#dc2626" : "#4CAF50" }}>
+                오늘 소모: {consumed}개
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OpsRecommendation({ waitingPlayers, players, matchhistory, matchMode, isFirstTimer, roster }) {
   if (players.length === 0) return null;
 
@@ -767,10 +891,11 @@ function App() {
   function removePlayer(id) {
     if (String(id).startsWith("guest_")) {
       setPlayers((p) => p.filter((x) => x.id !== id));
-      REFS.guestlist.get().then((snap) => {
+      db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.guestlist);
         const data = snap.data() || {};
         const items = (data.items || []).filter((g) => g.id !== id);
-        REFS.guestlist.set({ items }).catch(() => {});
+        tx.set(REFS.guestlist, { items });
       }).catch(() => {});
       return;
     }
@@ -808,13 +933,12 @@ function App() {
     const guestId = "guest_" + uid();
     const entry = { id: guestId, name: trimmed, date: todayStr() };
     setPlayers((p) => [...p, { id: guestId, name: `${trimmed} (게스트)`, gamesPlayed: 0, wins: 0, losses: 0 }]);
-    REFS.guestlist.get().then((snap) => {
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.guestlist);
       const data = snap.data() || {};
       const items = [...(data.items || []), entry];
-      REFS.guestlist.set({ items }).catch(() => {});
-    }).catch(() => {
-      REFS.guestlist.set({ items: [entry] }).catch(() => {});
-    });
+      tx.set(REFS.guestlist, { items });
+    }).catch(() => {});
     setGuestName("");
   }
 
@@ -1411,6 +1535,8 @@ function App() {
               </div>
             </div>
           </div>
+
+          <ShuttlecockPanel players={players} myId={myId} adminOn={adminOn} isFirstTimer={isFirstTimer} />
 
           {adminOn && <OpsRecommendation waitingPlayers={waitingPlayers} players={players} matchhistory={matchhistory} matchMode={matchMode} isFirstTimer={isFirstTimer} roster={roster} />}
 
