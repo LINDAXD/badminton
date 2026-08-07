@@ -31,7 +31,11 @@ function MenuGrid({ items }) {
             onClick={it.onClick}
             className="tap-scale bg-white rounded-2xl p-4 border border-stone-100 shadow-sm flex items-center gap-3 text-left"
           >
-            <span className="text-2xl">{it.emoji}</span>
+            {it.mascotSlot ? (
+              <Mascot slot={it.mascotSlot} fallback={it.emoji} className="text-2xl" imgClassName="w-8 h-8 object-contain shrink-0" />
+            ) : (
+              <span className="text-2xl">{it.emoji}</span>
+            )}
             <div className="min-w-0">
               <p className="text-sm font-bold text-stone-800">{it.title}</p>
               {it.subtitle && <p className="text-[10px] text-stone-400 mt-0.5 truncate">{it.subtitle}</p>}
@@ -361,11 +365,11 @@ function App() {
       {activeView === null && (
         <MenuGrid
           items={[
-            { key: "schedule", emoji: "🗓️", title: "일정", subtitle: "참석 체크·출석왕", onClick: () => setActiveView("schedule") },
+            { key: "schedule", emoji: "🗓️", mascotSlot: "buddy-schedule", title: "일정", subtitle: "참석 체크·출석왕", onClick: () => setActiveView("schedule") },
             { key: "suggestions", emoji: "📮", title: "건의함", subtitle: "익명으로 건의하기", onClick: () => setActiveView("suggestions") },
             { key: "myinfo", emoji: "🙋", title: "나의 활동", subtitle: "내 기록 모아보기", onClick: () => { window.location.href = "./myinfo.html"; } },
             { key: "stats", emoji: "📊", title: "통계", subtitle: "순위·명예의 전당", onClick: () => { window.location.href = "./stats.html"; } },
-            { key: "vote", emoji: "🗳️", title: "투표", subtitle: "MVP·친절왕 등", onClick: () => { window.location.href = "./vote.html"; } },
+            { key: "vote", emoji: "🗳️", mascotSlot: "buddy-vote", title: "투표", subtitle: "MVP·친절왕 등", onClick: () => { window.location.href = "./vote.html"; } },
             ...(adminOn ? [{ key: "admin", emoji: "🛠️", title: "관리자 전용", subtitle: "회원·공지 관리", onClick: () => setActiveView("admin") }] : []),
           ]}
         />

@@ -362,18 +362,71 @@ function App() {
   const nextUp = waitingNow.slice(0, 2);
 
   return (
-    <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
-      {/* top */}
-      <header className="px-5 pt-7 pb-2 max-w-2xl mx-auto flex items-center justify-between">
-        <span className="headfont text-lg" style={{ color: "#4CAF50" }}>🏸 Birdie</span>
-        {myId ? (
-          <button onClick={logout} className="text-xs bg-stone-50 border border-stone-200 text-stone-500 rounded-full px-3 py-1.5 font-medium">
-            {myName}님 · 로그아웃
-          </button>
-        ) : (
-          <button onClick={() => setShowLoginModal(true)} className="text-xs bg-white border rounded-full px-3 py-1.5 font-medium" style={{ borderColor: "#4CAF50", color: "#4CAF50" }}>
-            로그인
-          </button>
+    <div className="min-h-screen pb-24 font-sans" style={{ backgroundColor: "#FAFAF8", color: "#2A2A28" }}>
+      {/* top greeting card — Toss/당근 스타일: 인사말 + 날짜 + 오늘 현황을 한 초록 카드에 */}
+      <header className="px-5 pt-6 pb-5 max-w-2xl mx-auto">
+        <div className="rise-in rounded-[28px] p-5 text-white relative overflow-hidden" style={{ background: "linear-gradient(135deg, #52B858 0%, #3C9A45 100%)" }}>
+          <Mascot
+            slot="buddy-hero"
+            fallback="🏸"
+            className="absolute text-6xl opacity-90"
+            imgClassName="absolute w-24 h-24 object-contain"
+            style={{ right: "-6px", bottom: "-6px" }}
+          />
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="headfont text-[22px] leading-tight">
+                {myId ? <>안녕하세요, {myName}님 👋</> : "혼자보다 함께, 버디"}
+              </p>
+              <p className="text-[12px] mt-1" style={{ color: "rgba(255,255,255,0.85)" }}>
+                {new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}
+              </p>
+            </div>
+            {myId ? (
+              <button onClick={logout} className="tap-scale text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0" style={{ backgroundColor: "rgba(255,255,255,0.18)" }}>
+                로그아웃
+              </button>
+            ) : (
+              <button onClick={() => setShowLoginModal(true)} className="tap-scale text-[11px] font-bold px-3.5 py-1.5 rounded-full shrink-0" style={{ backgroundColor: "#ffffff", color: "#2E7D32" }}>
+                로그인
+              </button>
+            )}
+          </div>
+
+          {myId && isRealToday && attendCount > 0 ? (
+            <div className="rounded-2xl p-3.5 grid grid-cols-3 gap-2 text-center" style={{ backgroundColor: "rgba(255,255,255,0.14)" }}>
+              <div>
+                <p className="headfont text-xl">{attendCount}</p>
+                <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.8)" }}>오늘 참석</p>
+              </div>
+              <div>
+                <p className="headfont text-xl">{activeCourts}</p>
+                <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.8)" }}>코트 운영중</p>
+              </div>
+              <div>
+                <p className="headfont text-xl">{waitingNow.length}</p>
+                <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.8)" }}>현재 대기</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[13px]" style={{ color: "rgba(255,255,255,0.9)" }}>오늘도 같이 뛰어요, 우리 버디 🏸</p>
+          )}
+
+          {myId && isRealToday && attendCount > 0 && nextUp.length > 0 && (
+            <p className="text-[11px] mt-2.5" style={{ color: "rgba(255,255,255,0.85)" }}>🔜 다음 추천: {nextUp.map((p) => p.name).join(", ")}</p>
+          )}
+        </div>
+
+        <div className="flex gap-2 justify-center mt-4">
+          <a href="./more.html" className="tap-scale flex-1 text-center text-white text-sm font-bold px-6 py-3.5 rounded-2xl shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
+            🗓️ 모임 참석하기
+          </a>
+          <a href="./match.html" className="tap-scale flex-1 text-center text-sm font-bold px-6 py-3.5 rounded-2xl border" style={{ borderColor: "#FFD54F", color: "#B98900", backgroundColor: "#FFFBEA" }}>
+            🎲 랜덤매칭
+          </a>
+        </div>
+        {myStatusText && (
+          <p className="text-xs mt-2.5 text-center" style={{ color: "#4CAF50" }}>{myStatusText}</p>
         )}
       </header>
 
@@ -396,71 +449,16 @@ function App() {
         </section>
       )}
 
-      {/* 🏸 오늘 운영 — 운영자가 한눈에 상황 파악 (실제 오늘 모임일 때만) */}
-      {myId && isRealToday && attendCount > 0 && (
-        <section className="px-5 pt-3 max-w-2xl mx-auto">
-          <div className="rise-in bg-white rounded-2xl p-4 border border-stone-100 shadow-sm">
-            <p className="text-xs font-bold text-stone-500 mb-3">🏸 오늘 운영</p>
-            <div className="grid grid-cols-3 gap-2 text-center mb-3">
-              <div>
-                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{attendCount}</p>
-                <p className="text-[10px] text-stone-400">오늘 참석</p>
-              </div>
-              <div>
-                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{activeCourts}</p>
-                <p className="text-[10px] text-stone-400">코트 운영중</p>
-              </div>
-              <div>
-                <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{waitingNow.length}</p>
-                <p className="text-[10px] text-stone-400">현재 대기</p>
-              </div>
-            </div>
-            {nextUp.length > 0 && (
-              <p className="text-[11px] text-stone-400">다음 추천: {nextUp.map((p) => p.name).join(", ")}</p>
-            )}
-            <a href="./match.html" className="mt-2 block text-center text-xs font-semibold py-2 rounded-lg" style={{ backgroundColor: "#F0FBF1", color: "#2e7d32" }}>
-              🎲 매칭 페이지로 이동
-            </a>
-          </div>
+      {/* hero photo (최근 모임 사진이 있을 때만, 후기 미리보기 느낌으로 축소) */}
+      {latestPhoto && (
+        <section className="px-5 pt-4 max-w-2xl mx-auto">
+          <a href="./reviews.html" className="tap-scale relative rounded-3xl overflow-hidden block rise-in" style={{ height: "140px" }}>
+            <img src={photosOf(latestPhoto)[0]} alt="최근 모임 사진" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent" />
+            <p className="absolute bottom-3 left-4 text-white text-xs font-semibold">📸 최근 후기 보기</p>
+          </a>
         </section>
       )}
-
-      {/* hero */}
-      <section className="px-5 pt-4 pb-6 max-w-2xl mx-auto text-center">
-        {latestPhoto ? (
-          <div className="relative rounded-3xl overflow-hidden mb-4 rise-in" style={{ height: "180px" }}>
-            <img src={photosOf(latestPhoto)[0]} alt="최근 모임 사진" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-4 text-left">
-              <h1 className="headfont text-2xl text-white leading-snug">
-                혼자보다 함께, <span style={{ color: "#FFD54F" }}>버디</span>
-              </h1>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="text-6xl mb-3 floaty">🏸</div>
-            <h1 className="headfont text-3xl leading-snug text-stone-900">
-              혼자보다 함께,<br />
-              <span style={{ color: "#4CAF50" }}>버디</span>
-            </h1>
-          </>
-        )}
-        <p className="text-stone-400 mt-2 text-sm">오늘도 같이 뛰어요, 우리 버디</p>
-
-        <div className="flex gap-2 justify-center mt-6">
-          <a href="./more.html" className="tap-scale text-white text-base font-bold px-8 py-4 rounded-full shadow-sm" style={{ backgroundColor: "#4CAF50" }}>
-            🗓️ 모임 참석하기
-          </a>
-          <a href="./match.html" className="tap-scale text-sm font-bold px-6 py-4 rounded-full border" style={{ borderColor: "#FFD54F", color: "#B98900", backgroundColor: "#FFFBEA" }}>
-            🎲 랜덤매칭
-          </a>
-        </div>
-        {myStatusText && (
-          <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{myStatusText}</p>
-        )}
-        {checkedInMsg && <p className="text-xs mt-2" style={{ color: "#4CAF50" }}>{checkedInMsg}</p>}
-      </section>
 
       {/* venue rental fee (대관비) */}
       {myId && paymentInfo && isRealToday && iAmInAttendanceSource && (
@@ -567,8 +565,8 @@ function App() {
 
       {/* upcoming schedule + 참석 인원을 한 카드로 합쳐서 붕 떠보이지 않게 */}
       <section className="px-5 max-w-2xl mx-auto mb-4">
-        <div className="rise-in bg-white rounded-2xl p-4 shadow-sm border border-stone-100">
-          <p className="text-[11px] text-stone-400 mb-2">🗓️ 다가오는 모임</p>
+        <div className="rise-in bc-card p-4">
+          <p className="text-[11px] font-semibold text-stone-400 mb-2 tracking-wide">🗓️ 다가오는 모임</p>
           {upcomingList.length === 0 ? (
             <p className="text-sm text-stone-400">예정된 일정이 없어요.</p>
           ) : (
@@ -579,7 +577,7 @@ function App() {
                     {fmtDate(upcomingList[0].date)}
                     {upcomingList[0].time && <span className="ml-2 text-lg" style={{ color: "#4CAF50" }}>{fmtTime(upcomingList[0].time)}</span>}
                   </p>
-                  <p className="text-sm text-stone-600 mt-0.5 truncate">{upcomingList[0].title}{upcomingList[0].location ? ` · ${upcomingList[0].location}` : ""}</p>
+                  <p className="text-sm text-stone-500 mt-0.5 truncate">{upcomingList[0].title}{upcomingList[0].location ? ` · ${upcomingList[0].location}` : ""}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{attendCount}<span className="text-xs text-stone-400 font-normal">명</span></p>
@@ -593,10 +591,13 @@ function App() {
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {attendingMembers.slice(0, 12).map((m) => (
-                      <span key={m.id} className="text-xs bg-stone-50 border border-stone-200 rounded-full px-2.5 py-1 text-stone-600">
-                        {isFirstTimer(m.id) && <span className="mr-0.5">🌱</span>}
-                        {m.name}
-                      </span>
+                      isFirstTimer(m.id) ? (
+                        <StatusPill key={m.id} tone="green">🌱 {m.name}</StatusPill>
+                      ) : (
+                        <span key={m.id} className="text-xs bg-stone-50 border border-stone-200 rounded-full px-2.5 py-1 text-stone-600">
+                          {m.name}
+                        </span>
+                      )
                     ))}
                     {attendingMembers.length > 12 && (
                       <span className="text-xs text-stone-400 px-1 py-1">+{attendingMembers.length - 12}명 더</span>

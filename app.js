@@ -823,7 +823,7 @@ function BottomNav({ active }) {
     <nav className="bc-bottomnav">
       {items.map((it) => (
         <a key={it.key} href={it.href} className={active === it.key ? "active" : ""}>
-          <span className="icon">{it.icon}</span>
+          <span className="icon-wrap"><span className="icon">{it.icon}</span></span>
           {it.label}
         </a>
       ))}
@@ -834,9 +834,9 @@ function BottomNav({ active }) {
 // ---------- 상단 헤더 (공용) ----------
 function TopHeader({ title, subtitle }) {
   return (
-    <header className="px-5 pt-6 pb-4 max-w-2xl mx-auto">
-      <a href="./index.html" className="headfont text-base" style={{ color: "#4CAF50" }}>🏸 Birdie</a>
-      {title && <h1 className="headfont text-2xl text-stone-900 mt-2">{title}</h1>}
+    <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
+      <a href="./index.html" className="headfont text-xs tracking-wide" style={{ color: "#4CAF50" }}>🏸 BIRDIE</a>
+      {title && <h1 className="headfont text-[26px] text-stone-900 mt-1.5 leading-tight">{title}</h1>}
       {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
     </header>
   );
@@ -861,7 +861,57 @@ function MiniTag({ children }) {
   );
 }
 
+// 참/늦참/결석 같은 상태를 색깔 있는 알약 배지로 — 초록(긍정) / 노랑(주의) / 빨강(부정) / 회색(중립)
+function StatusPill({ tone, children }) {
+  const tones = {
+    green: { bg: "#E8F5E9", fg: "#2E7D32" },
+    yellow: { bg: "#FFF8E1", fg: "#B98900" },
+    red: { bg: "#FDECEC", fg: "#C0392B" },
+    gray: { bg: "#F4F4F2", fg: "#8A8A85" },
+  };
+  const t = tones[tone] || tones.gray;
+  return (
+    <span
+      className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full"
+      style={{ backgroundColor: t.bg, color: t.fg }}
+    >
+      {children}
+    </span>
+  );
+}
+
+// 승률/참석률처럼 0~100 값을 막대로 보여줄 때 — 라벨 위, 막대 아래
+function ProgressBar({ value, max, color }) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <div className="bc-progress-track">
+      <div className="bc-progress-fill" style={{ width: `${pct}%`, backgroundColor: color || "#4CAF50" }} />
+    </div>
+  );
+}
+
 // ---------- 로딩 스켈레톤 ----------
 function Skeleton({ className }) {
-  return <div className={`shimmer rounded-xl ${className || "h-16 w-full"}`} />;
+  return <div className={`shimmer rounded-2xl ${className || "h-16 w-full"}`} />;
+}
+
+// ---------- 버디 캐릭터 이미지 슬롯 ----------
+// 아직 실제 캐릭터 파일이 없어서 이모지로 대체해서 보여줘요. 나중에 /images/ 폴더에 정해진 이름으로
+// 파일만 넣으면(예: buddy-hero.png), 코드 수정 없이 자동으로 캐릭터 이미지로 바뀌어요.
+// 슬롯 이름 목록: buddy-hero(홈 인사말), buddy-profile(기본 프로필), buddy-notice(공지),
+// buddy-vote(투표), buddy-match(매칭), buddy-schedule(일정), buddy-logo(로고/앱아이콘)
+function Mascot({ slot, fallback, className, imgClassName, style }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <span className={className} style={style}>{fallback || "🏸"}</span>;
+  }
+  return (
+    <img
+      src={`./images/${slot}.png`}
+      alt=""
+      onError={() => setFailed(true)}
+      className={imgClassName || className}
+      style={style}
+    />
+  );
 }
