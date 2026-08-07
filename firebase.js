@@ -13,6 +13,12 @@ firebase.initializeApp(firebaseConfig);
 
 window.db = firebase.firestore();
 
+// 익명 로그인 — Firestore 보안 규칙에서 "로그인된 사용자만 읽기/쓰기 가능"하게 제한할 수 있도록 해줘요.
+// 회원 이름/비밀번호 방식과는 별개로, 앱이 열리면 자동으로(팝업 없이) 조용히 한 번 로그인돼요.
+firebase.auth().signInAnonymously().catch((err) => {
+  console.error("익명 로그인 실패:", err);
+});
+
 // ---- Cloudinary 설정 (사진 업로드용) ----
 // Firebase Storage는 이제 카드 등록(Blaze)이 필요해서, 대신 무료인 Cloudinary를 씁니다.
 // 아래 두 값을 Cloudinary 가입 후 본인 값으로 꼭 채워주세요:
