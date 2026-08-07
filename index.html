@@ -623,9 +623,43 @@ function App() {
         </div>
       </section>
 
+      {/* 오늘의 주요 정보 — 투표/이달의 MVP/생일을 한눈에 */}
+      <section className="px-5 max-w-2xl mx-auto mb-4">
+        <p className="text-xs font-bold text-stone-500 mb-2">오늘의 주요 정보</p>
+        <div className="grid grid-cols-3 gap-2">
+          <a href="./vote.html" className="tap-scale bc-card p-3 text-center block">
+            <p className="text-[10px] text-stone-400 mb-1">🗳️ 오늘 투표</p>
+            {myId && isRealToday && iAmInAttendanceSource ? (
+              <StatusPill tone="green">투표하기</StatusPill>
+            ) : (
+              <p className="text-[11px] text-stone-400 mt-1.5">진행 없음</p>
+            )}
+          </a>
+          <a href="./stats.html" className="tap-scale bc-card p-3 text-center block overflow-hidden">
+            <p className="text-[10px] text-stone-400 mb-1">🏆 이번달 MVP</p>
+            {(() => {
+              const leader = monthlyLeader(dailyvotesDoc, "mvp", roster);
+              return leader ? (
+                <p className="text-xs font-bold text-stone-800 truncate mt-1">{leader.member.name}</p>
+              ) : (
+                <p className="text-[11px] text-stone-400 mt-1.5">집계 전</p>
+              );
+            })()}
+          </a>
+          <div className="bc-card p-3 text-center overflow-hidden">
+            <p className="text-[10px] text-stone-400 mb-1">🎂 오늘 생일</p>
+            {birthdayMembers.length > 0 ? (
+              <p className="text-xs font-bold text-stone-800 truncate mt-1">{birthdayMembers.map((m) => m.name).join(", ")}</p>
+            ) : (
+              <p className="text-[11px] text-stone-400 mt-1.5">없음</p>
+            )}
+          </div>
+        </div>
+      </section>
+
       {/* quick cards: 후기 + 공지 나란히 배치해서 스크롤 줄이기 */}
       <section className="px-5 max-w-2xl mx-auto grid grid-cols-2 gap-3 mb-4">
-        <a href="./reviews.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale overflow-hidden">
+        <a href="./reviews.html" className="rise-in block bc-card p-4 tap-scale overflow-hidden">
           <p className="text-[11px] text-stone-400 mb-1">📸 최근 후기</p>
           {!reviewsReady ? (
             <Skeleton className="h-5 w-2/3" />
@@ -636,7 +670,7 @@ function App() {
           )}
         </a>
 
-        <a href="./notices.html" className="rise-in block bg-white rounded-2xl p-4 shadow-sm border border-stone-100 tap-scale overflow-hidden">
+        <a href="./notices.html" className="rise-in block bc-card p-4 tap-scale overflow-hidden">
           <p className="text-[11px] text-stone-400 mb-1">📢 공지사항</p>
           {!noticesReady ? (
             <Skeleton className="h-5 w-2/3" />
