@@ -135,8 +135,8 @@ function App() {
       setAddMsg("이름을 한 줄에 한 명씩 입력해주세요.");
       return;
     }
-    const existingNames = new Set(roster.map((m) => m.name));
-    const uniqueNew = [...new Set(names)].filter((n) => !existingNames.has(n));
+    const existingNames = new Set(roster.map((m) => (m.name || "").normalize("NFC")));
+    const uniqueNew = [...new Set(names.map((n) => n.normalize("NFC")))].filter((n) => !existingNames.has(n));
     if (!uniqueNew.length) {
       setAddMsg("이미 모두 등록되어 있는 이름이에요.");
       return;

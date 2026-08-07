@@ -262,7 +262,10 @@ function App() {
     const name = loginInput.trim();
     if (!name) { setLoginMsg("이름을 입력해주세요."); return; }
     if (!rosterReady) { setLoginMsg("회원 명단을 불러오는 중이에요. 잠시 후 다시 눌러주세요."); return; }
-    const existing = roster.find((m) => (m.name || "").trim() === name);
+    // 한글은 기기/키보드에 따라 눈에는 똑같아 보여도 내부 코드가 미세하게 다르게 저장될 수 있어서(정규화 차이),
+    // 양쪽 다 표준 형태로 맞춰서 비교해요 — 이래야 "이미 있는 이름인데 처음 왔다고 뜨는" 문제가 확실히 없어져요.
+    const normalizedName = name.normalize("NFC");
+    const existing = roster.find((m) => (m.name || "").trim().normalize("NFC") === normalizedName);
     if (existing) {
       if (existing.pin) {
         const pin = await appPrompt(`${name}님, 본인 확인을 위해 비밀번호(숫자 4자리)를 입력해주세요.`, "", { password: true });
@@ -284,7 +287,7 @@ function App() {
         setLoginMsg("비밀번호가 설정됐어요. 다음부턴 이 비밀번호로 입장해주세요.");
       }
     } else {
-      const alreadyPending = pending.some((p) => p.name === name);
+      const alreadyPending = pending.some((p) => (p.name || "").normalize("NFC") === normalizedName);
       if (alreadyPending) {
         setLoginMsg("이미 관리자 승인을 기다리고 있는 이름이에요. 승인되면 로그인할 수 있어요.");
         setLoginInput("");

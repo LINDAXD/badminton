@@ -880,7 +880,7 @@ function App() {
       setAddError("이름을 입력해주세요.");
       return;
     }
-    if (roster.some((m) => m.name === name)) {
+    if (roster.some((m) => (m.name || "").normalize("NFC") === name.normalize("NFC"))) {
       setAddError(`"${name}"은(는) 이미 등록되어 있어요.`);
       return;
     }
