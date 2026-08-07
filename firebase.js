@@ -65,4 +65,4 @@ window.GRADES = [
 window.LEVELS = ["왕초보", "초보", "D조", "C조", "B조"];
 window.LEVEL_SKILL = { "왕초보": 0.05, "초보": 0.25, "D조": 0.5, "C조": 0.75, "B조": 0.95 };
 
-window.ADMIN_PIN = "1234";
+window.ADMIN_PIN = "004400";
