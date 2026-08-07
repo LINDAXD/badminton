@@ -816,13 +816,12 @@ function BottomNav({ active }) {
 // ---------- 상단 헤더 (공용) ----------
 function TopHeader({ title, subtitle }) {
   return (
-    <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto flex items-center justify-between gap-3">
+    <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
       <div className="min-w-0">
         <a href="./index.html" className="headfont text-xs tracking-wide" style={{ color: "#4CAF50" }}>🏸 BIRDIE</a>
         {title && <h1 className="headfont text-[26px] text-stone-900 mt-1.5 leading-tight">{title}</h1>}
         {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
       </div>
-      <Mascot slot="buddy-logo" fallback={null} className="shrink-0" size={44} />
     </header>
   );
 }
