@@ -1579,15 +1579,15 @@ function App() {
             const m = raw && raw.date === todayStr() ? raw : null; // 오늘 날짜가 아닌(예전) 경기는 화면상 비어있는 코트로 취급해요
             const isManualHere = manualCourt === courtNum;
             return (
-              <div key={courtNum} className="rise-in bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-sm">
-                <div className="bg-[#4CAF50] text-white/90 text-[11px] uppercase tracking-[0.2em] px-4 py-1.5 flex justify-between items-center">
-                  <span>Court {courtNum} {lockedCourts.includes(courtNum) && "🔒"}</span>
+              <div key={courtNum} className="rise-in bc-card overflow-hidden">
+                <div className="px-4 py-2.5 flex justify-between items-center" style={{ background: "linear-gradient(135deg, #52B858 0%, #3C9A45 100%)" }}>
+                  <span className="text-white text-[11px] font-bold uppercase tracking-[0.15em]">Court {courtNum} {lockedCourts.includes(courtNum) && "🔒"}</span>
                   <div className="flex items-center gap-2">
-                    {m && m.done && <span className="text-[#FFD54F]">종료</span>}
-                    {m && !m.done && <span className="text-[#FFD54F]">경기중</span>}
-                    {!m && <span className="text-white/60">비어있음</span>}
+                    {m && m.done && <StatusPill tone="yellow">종료</StatusPill>}
+                    {m && !m.done && <StatusPill tone="green">경기중</StatusPill>}
+                    {!m && <StatusPill tone="gray">비어있음</StatusPill>}
                     {adminOn && (
-                      <button onClick={() => toggleCourtLock(courtNum)} className="text-white/70 text-[10px] normal-case tracking-normal underline underline-offset-2">
+                      <button onClick={() => toggleCourtLock(courtNum)} className="text-white/80 text-[10px] normal-case tracking-normal underline underline-offset-2">
                         {lockedCourts.includes(courtNum) ? "잠금해제" : "잠그기"}
                       </button>
                     )}

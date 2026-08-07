@@ -220,12 +220,12 @@ function App() {
 
       {adminOn && pending.length > 0 && (
         <section className="px-5 max-w-2xl mx-auto mb-5">
-          <div className="bg-white rounded-2xl p-4 border-2" style={{ borderColor: "#FFD54F" }}>
+          <div className="bc-card p-4" style={{ borderColor: "#FFD54F", borderWidth: "1.5px" }}>
             <p className="text-sm font-bold text-stone-800 mb-1">🙋 가입 승인 대기 ({pending.length}명)</p>
             <p className="text-xs text-stone-400 mb-3">새로 이름을 입력한 사람들이에요. 승인해야 그 이름+비밀번호로 로그인할 수 있어요.</p>
             <ul className="space-y-2">
               {pending.map((req) => (
-                <li key={req.id} className="flex items-center justify-between border border-stone-200 rounded-xl px-3 py-2.5">
+                <li key={req.id} className="flex items-center justify-between bg-stone-50 rounded-2xl px-3 py-2.5">
                   <div>
                     <p className="text-sm font-semibold text-stone-800">{req.name}</p>
                     <p className="text-[11px] text-stone-400">{req.requestedAt} 신청{req.level ? ` · 희망 레벨 ${req.level}` : ""}</p>
@@ -262,7 +262,7 @@ function App() {
               <p className="text-xs font-bold text-stone-500 mb-2">{g.emoji} {g.key} ({g.members.length})</p>
               <ul className="space-y-2">
                 {g.members.map((m) => (
-                  <li key={m.id} className="rise-in bg-white rounded-xl px-4 py-3 border border-stone-200 shadow-sm">
+                  <li key={m.id} className="rise-in bc-card px-4 py-3.5">
                     <div className="flex items-center justify-between">
                       <button onClick={() => setProfileMember(m)} className="text-left tap-scale">
                         <p className="text-sm font-semibold text-stone-800 underline decoration-dotted underline-offset-4">{m.name}</p>
