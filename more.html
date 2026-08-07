@@ -95,7 +95,7 @@ function DataResetPanel() {
       }
       setMsg("선택한 데이터가 초기화됐어요! ✅");
     } catch (e) {
-      setMsg("초기화 중 문제가 생겼어요. 다시 시도해주세요.");
+      setMsg("초기화 실패: " + (e && e.message ? e.message : "알 수 없는 오류"));
     } finally {
       setBusy(false);
       setTimeout(() => setMsg(""), 4000);
@@ -117,7 +117,7 @@ function DataResetPanel() {
       await REFS.roster.set({ members: cleaned });
       setMsg("회원 개인정보가 초기화됐어요! ✅");
     } catch (e) {
-      setMsg("초기화 중 문제가 생겼어요. 다시 시도해주세요.");
+      setMsg("초기화 실패: " + (e && e.message ? e.message : "알 수 없는 오류"));
     } finally {
       setPiiBusy(false);
       setTimeout(() => setMsg(""), 4000);
