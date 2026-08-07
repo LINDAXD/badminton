@@ -834,10 +834,13 @@ function BottomNav({ active }) {
 // ---------- 상단 헤더 (공용) ----------
 function TopHeader({ title, subtitle }) {
   return (
-    <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto">
-      <a href="./index.html" className="headfont text-xs tracking-wide" style={{ color: "#4CAF50" }}>🏸 BIRDIE</a>
-      {title && <h1 className="headfont text-[26px] text-stone-900 mt-1.5 leading-tight">{title}</h1>}
-      {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
+    <header className="px-5 pt-6 pb-3 max-w-2xl mx-auto flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <a href="./index.html" className="headfont text-xs tracking-wide" style={{ color: "#4CAF50" }}>🏸 BIRDIE</a>
+        {title && <h1 className="headfont text-[26px] text-stone-900 mt-1.5 leading-tight">{title}</h1>}
+        {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
+      </div>
+      <Mascot slot="buddy-logo" fallback={null} className="text-3xl shrink-0" imgClassName="w-11 h-11 object-contain shrink-0" />
     </header>
   );
 }
@@ -903,6 +906,7 @@ function Skeleton({ className }) {
 function Mascot({ slot, fallback, className, imgClassName, style }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
+    if (fallback === null) return null; // 대체할 이모지가 마땅치 않은 자리는, 파일 없을 때 그냥 아무것도 안 보여줘요
     return <span className={className} style={style}>{fallback || "🏸"}</span>;
   }
   return (
