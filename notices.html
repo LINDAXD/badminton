@@ -60,7 +60,7 @@ function NoticeCard({ n, adminOn, myId, myName, onRemove, onDeletePhoto }) {
   }
 
   return (
-    <li className="rise-in bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+    <li className="rise-in bc-card overflow-hidden">
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -76,7 +76,7 @@ function NoticeCard({ n, adminOn, myId, myName, onRemove, onDeletePhoto }) {
 
         {n.photoUrl && (
           <div className="mt-3 relative">
-            <img src={n.photoUrl} alt="공지 사진" className="rounded-xl w-full max-h-64 object-cover" />
+            <img src={n.photoUrl} alt="공지 사진" className="rounded-2xl w-full max-h-64 object-cover" />
             {adminOn && (
               <button
                 onClick={() => onDeletePhoto(n.id, n.photoUrl)}
