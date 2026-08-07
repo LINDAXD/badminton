@@ -901,3 +901,33 @@ function Mascot({ slot, fallback, className, imgClassName, style }) {
     />
   );
 }
+
+// 사진 없는 회원용 — 이름 기반으로 색깔이 항상 똑같이 나오는 동그란 이니셜 아바타예요.
+const AVATAR_COLORS = ["#4CAF50", "#42A5F5", "#FFA726", "#EC407A", "#AB47BC", "#26A69A", "#7E57C2", "#EF5350"];
+function avatarColorFor(name) {
+  const str = String(name || "?");
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+function Avatar({ name, photoUrl, size }) {
+  const px = size || 36;
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt={name}
+        className="rounded-full object-cover shrink-0"
+        style={{ width: px, height: px }}
+      />
+    );
+  }
+  return (
+    <div
+      className="rounded-full flex items-center justify-center text-white font-bold shrink-0"
+      style={{ width: px, height: px, backgroundColor: avatarColorFor(name), fontSize: px * 0.42 }}
+    >
+      {(name || "?").trim().slice(0, 1)}
+    </div>
+  );
+}

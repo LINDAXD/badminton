@@ -1557,13 +1557,14 @@ function App() {
           {waitingPlayers.length > 0 && (
             <div className="bg-stone-100 rounded-2xl p-4 border border-stone-200">
               <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">⏳ 대기 중 ({waitingPlayers.length}명)</p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {waitingPlayers.map((p, i) => (
                   <span
                     key={p.id}
-                    className={`text-xs px-2.5 py-1 rounded-full ${i < 4 ? "text-white font-semibold" : "bg-white text-stone-500 border border-stone-200"}`}
+                    className={`text-xs pl-1 pr-2.5 py-1 rounded-full flex items-center gap-1.5 ${i < 4 ? "text-white font-semibold" : "bg-white text-stone-500 border border-stone-200"}`}
                     style={i < 4 ? { backgroundColor: "#4CAF50" } : {}}
                   >
+                    <Avatar name={p.name} size={20} />
                     {i < 4 ? "🔜 " : ""}{p.name}
                   </span>
                 ))}
@@ -1658,18 +1659,30 @@ function App() {
                 ) : (
                   <>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-4 gap-2">
-                      <div className="text-right">
-                        <p className="text-sm font-medium leading-tight">{m.teamA[0].name}</p>
-                        <p className="text-sm font-medium leading-tight">{m.teamA[1].name}</p>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-2 justify-end">
+                          <p className="text-sm font-medium leading-tight">{m.teamA[0].name}</p>
+                          <Avatar name={m.teamA[0].name} size={30} />
+                        </div>
+                        <div className="flex items-center gap-2 justify-end">
+                          <p className="text-sm font-medium leading-tight">{m.teamA[1].name}</p>
+                          <Avatar name={m.teamA[1].name} size={30} />
+                        </div>
                       </div>
                       <div className="flex flex-col items-center gap-1">
                         <div className="w-px h-4 bg-stone-300" />
                         <span className="text-[10px] text-stone-400">VS</span>
                         <div className="w-px h-4 bg-stone-300" />
                       </div>
-                      <div>
-                        <p className="text-sm font-medium leading-tight">{m.teamB[0].name}</p>
-                        <p className="text-sm font-medium leading-tight">{m.teamB[1].name}</p>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <Avatar name={m.teamB[0].name} size={30} />
+                          <p className="text-sm font-medium leading-tight">{m.teamB[0].name}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Avatar name={m.teamB[1].name} size={30} />
+                          <p className="text-sm font-medium leading-tight">{m.teamB[1].name}</p>
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center justify-center gap-3 pb-4">
