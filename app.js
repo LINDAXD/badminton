@@ -145,8 +145,6 @@ window.BADGE_DEFS = [
   { key: "chat", emoji: "🏸", label: "소통왕", earn: (s, m) => !!(m && m.manualBadges && m.manualBadges.chat) },
   { key: "kind", emoji: "🤝", label: "친절왕", earn: (s, m) => !!(m && m.manualBadges && m.manualBadges.kind) || (s.kindVotes || 0) >= 5 || (s.kindWins || 0) >= 1 },
   { key: "mood", emoji: "😂", label: "분위기 메이커", earn: (s) => (s.moodWins || 0) >= 1 },
-  { key: "growth", emoji: "💪", label: "성장왕", earn: (s) => (s.growthWins || 0) >= 1 },
-  { key: "newcomer", emoji: "🌱", label: "이달의 신인상", earn: (s) => (s.newcomerWins || 0) >= 1 },
   { key: "birthdayWeek", emoji: "🎂", label: "생일 주간", earn: (s, m) => {
     if (!m || !m.birthday || m.birthday.length !== 4) return false;
     const now = new Date();
@@ -310,17 +308,14 @@ function topPartners(memberId, matchhistory, n) {
   return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, n || 3);
 }
 
-// ---------- 월간 투표 시스템 (친절왕 / MVP / 성장왕 / 분위기메이커 / 이달의 신인상) ----------
+// ---------- 월간 투표 시스템 (친절왕 / MVP / 분위기메이커) ----------
 // 결과는 그 자리에서 바로 공개하지 않고, 점수만 쌓아뒀다가 매월 자동으로 집계해서 보여줘요.
 window.VOTE_CATEGORIES = [
   { key: "kind", emoji: "😊", label: "친절왕", question: "가장 배려를 많이 해준 회원은 누구인가요?" },
   { key: "mvp", emoji: "⭐", label: "MVP", question: "가장 인상적인 플레이를 보여준 회원은 누구인가요?" },
-  { key: "growth", emoji: "💪", label: "성장왕", question: "가장 성장한 회원은 누구인가요?" },
   { key: "mood", emoji: "😂", label: "분위기메이커", question: "분위기를 즐겁게 만든 회원은 누구인가요?" },
 ];
-// 신인상은 별도 카테고리 — 후보가 "최근 가입한 회원"으로 제한된다는 점만 달라요.
-window.NEWCOMER_CATEGORY = { key: "newcomer", emoji: "🌱", label: "이달의 신인상", question: "이번 달 가장 열심히/인상 깊게 참여한 신입 회원은 누구인가요?" };
-window.ALL_VOTE_CATEGORIES = [...window.VOTE_CATEGORIES, window.NEWCOMER_CATEGORY];
+window.ALL_VOTE_CATEGORIES = [...window.VOTE_CATEGORIES];
 
 
 // dailyvotes 문서 구조: { data: { [date]: { [category]: [{voterId, votedForId}] } } }

@@ -59,16 +59,6 @@ function App() {
   const iAttendedToday = !!(myId && attendingToday.some((m) => m.id === myId));
   const candidates = attendingToday.filter((m) => m.id !== myId);
 
-  // 이달의 신인상은 "최근 가입한 회원"만 후보로 나와요 (가입 30일 이내, 또는 이번 달 가입)
-  const thisMonth = today.slice(0, 7);
-  const newcomerCandidates = candidates.filter((m) => {
-    const full = roster.find((r) => r.id === m.id);
-    if (!full || !full.joinedAt) return false;
-    if (full.joinedAt.slice(0, 7) === thisMonth) return true;
-    const days = Math.floor((new Date() - new Date(full.joinedAt)) / 86400000);
-    return days <= 30;
-  });
-
   const myVotesToday = dailyvotesDoc[today] || {};
 
   function hasVoted(category) {
@@ -144,7 +134,6 @@ function App() {
             🔒 완전 익명이에요. 본인에게는 투표할 수 없고, 카테고리별로 1표씩만 가능해요. 투표 결과는 그 자리에서 공개되지 않고, 매월 1일에 한 달치를 모아서 발표돼요. 투표할 사람이 없으면 "없음"을 눌러도 돼요.
           </div>
           {window.VOTE_CATEGORIES.map((cat) => renderCategory(cat, candidates))}
-          {renderCategory(window.NEWCOMER_CATEGORY, newcomerCandidates)}
         </section>
       )}
 
