@@ -822,7 +822,7 @@ function TopHeader({ title, subtitle }) {
         {title && <h1 className="headfont text-[26px] text-stone-900 mt-1.5 leading-tight">{title}</h1>}
         {subtitle && <p className="text-sm text-stone-400 mt-1">{subtitle}</p>}
       </div>
-      <Mascot slot="buddy-logo" fallback={null} className="text-3xl shrink-0" imgClassName="w-11 h-11 object-contain shrink-0" />
+      <Mascot slot="buddy-logo" fallback={null} className="shrink-0" size={44} />
     </header>
   );
 }
@@ -885,8 +885,10 @@ function Skeleton({ className }) {
 // 파일만 넣으면(예: buddy-hero.png), 코드 수정 없이 자동으로 캐릭터 이미지로 바뀌어요.
 // 슬롯 이름 목록: buddy-hero(홈 인사말), buddy-profile(기본 프로필), buddy-notice(공지),
 // buddy-vote(투표), buddy-match(매칭), buddy-schedule(일정), buddy-logo(로고/앱아이콘)
-function Mascot({ slot, fallback, className, imgClassName, style }) {
+// 사이즈는 항상 style로 강제 지정해요 (Tailwind 클래스에만 의존하면 캐시/우선순위 문제로 원본 크기 그대로 나오는 경우가 있어서, 무조건 적용되는 인라인 스타일로 안전하게 고정해요)
+function Mascot({ slot, fallback, className, imgClassName, style, size, objectFit }) {
   const [failed, setFailed] = useState(false);
+  const sizeStyle = size ? { width: size, height: size, objectFit: objectFit || "contain", flexShrink: 0 } : {};
   if (failed) {
     if (fallback === null) return null; // 대체할 이모지가 마땅치 않은 자리는, 파일 없을 때 그냥 아무것도 안 보여줘요
     return <span className={className} style={style}>{fallback || "🏸"}</span>;
@@ -897,7 +899,7 @@ function Mascot({ slot, fallback, className, imgClassName, style }) {
       alt=""
       onError={() => setFailed(true)}
       className={imgClassName || className}
-      style={style}
+      style={{ ...sizeStyle, ...style }}
     />
   );
 }

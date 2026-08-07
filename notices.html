@@ -231,7 +231,7 @@ function App() {
           <div className="space-y-2"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>
         ) : sorted.length === 0 ? (
           <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-stone-200">
-            <Mascot slot="buddy-notice" fallback="📢" className="text-4xl inline-block mb-2" imgClassName="w-16 h-16 object-contain mx-auto mb-2" />
+            <Mascot slot="buddy-notice" fallback="📢" className="text-4xl inline-block mb-2" size={64} style={{ display: "block", margin: "0 auto 8px" }} />
             <p className="text-sm text-stone-400">아직 등록된 공지가 없어요.</p>
           </div>
         ) : (
