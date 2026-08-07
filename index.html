@@ -131,7 +131,7 @@ function RotatingBanner({ items }) {
 
 function App() {
   const { myId, myName, login, logout } = useIdentity();
-  const { roster } = useRoster();
+  const { roster, ready: rosterReady } = useRoster();
   const [loginInput, setLoginInput] = React.useState("");
   const [signupLevel, setSignupLevel] = React.useState("초보");
   const [showMySettings, setShowMySettings] = React.useState(false);
@@ -261,7 +261,8 @@ function App() {
   async function doLogin() {
     const name = loginInput.trim();
     if (!name) { setLoginMsg("이름을 입력해주세요."); return; }
-    const existing = roster.find((m) => m.name === name);
+    if (!rosterReady) { setLoginMsg("회원 명단을 불러오는 중이에요. 잠시 후 다시 눌러주세요."); return; }
+    const existing = roster.find((m) => (m.name || "").trim() === name);
     if (existing) {
       if (existing.pin) {
         const pin = await appPrompt(`${name}님, 본인 확인을 위해 비밀번호(숫자 4자리)를 입력해주세요.`, "", { password: true });
