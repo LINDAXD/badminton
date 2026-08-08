@@ -317,19 +317,22 @@ function ShuttlecockPanel({ players, myId, adminOn }) {
           const canEdit = adminOn || p.id === myId;
           const done = !!submittedMap[p.id];
           return (
-            <div key={p.id} className="flex items-center gap-1">
-              <button
-                onClick={() => toggleSubmitted(p.id)}
-                disabled={!canEdit}
-                className={`text-xs px-2.5 py-1.5 rounded-full border tap-scale disabled:opacity-60 ${done ? "text-white border-transparent" : "bg-stone-50 text-stone-500 border-stone-200"}`}
-                style={done ? { backgroundColor: "#4CAF50" } : {}}
-              >
-                {done ? "🏸 " : ""}{p.name}
-              </button>
+            <button
+              key={p.id}
+              onClick={() => toggleSubmitted(p.id)}
+              disabled={!canEdit}
+              className={`text-xs pl-2.5 pr-1.5 py-1.5 rounded-full border tap-scale disabled:opacity-60 flex items-center gap-1 ${done ? "text-white border-transparent" : "bg-stone-50 text-stone-500 border-stone-200"}`}
+              style={done ? { backgroundColor: "#4CAF50" } : {}}
+            >
+              {done ? "🏸 " : ""}{p.name}
               {adminOn && (
-                <button onClick={() => toggleExempt(p.id)} className="text-[10px] text-stone-300 underline underline-offset-2">면제</button>
+                <span
+                  onClick={(e) => { e.stopPropagation(); toggleExempt(p.id); }}
+                  className={`text-[10px] px-1 rounded-full ${done ? "text-white/70" : "text-stone-300"}`}
+                  title="면제"
+                >✕</span>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -337,12 +340,14 @@ function ShuttlecockPanel({ players, myId, adminOn }) {
       {exemptList.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
           {exemptList.map((p) => (
-            <div key={p.id} className="flex items-center gap-1 opacity-60">
-              <span className="text-xs px-2.5 py-1.5 rounded-full bg-stone-50 text-stone-400 border border-stone-200">{p.name}</span>
-              {adminOn && (
-                <button onClick={() => toggleExempt(p.id)} className="text-[10px] text-stone-400 underline underline-offset-2">해제</button>
-              )}
-            </div>
+            <button
+              key={p.id}
+              onClick={() => adminOn && toggleExempt(p.id)}
+              className="text-xs pl-2.5 pr-1.5 py-1.5 rounded-full bg-stone-50 text-stone-400 border border-stone-200 opacity-60 flex items-center gap-1"
+            >
+              {p.name}
+              {adminOn && <span className="text-[10px]">↩︎</span>}
+            </button>
           ))}
         </div>
       )}
