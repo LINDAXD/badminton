@@ -556,9 +556,9 @@ function App() {
         </div>
       )}
 
-      {/* upcoming schedule + 참석 인원을 한 카드로 합쳐서 붕 떠보이지 않게 */}
+      {/* upcoming schedule + 참석 인원을 한 카드로 합쳐서 붕 떠보이지 않게 — 카드 누르면 바로 참석 체크 화면으로 이동 */}
       <section className="px-5 max-w-2xl mx-auto mb-4">
-        <div className="rise-in bc-card p-4">
+        <a href="./more.html#schedule" className="rise-in bc-card p-4 block tap-scale">
           <p className="text-[11px] font-semibold text-stone-400 mb-2 tracking-wide">🗓️ 다가오는 모임</p>
           {upcomingList.length === 0 ? (
             <p className="text-sm text-stone-400">예정된 일정이 없어요.</p>
@@ -613,7 +613,7 @@ function App() {
               )}
             </>
           )}
-        </div>
+        </a>
       </section>
 
       {/* 오늘의 주요 정보 — 투표/이달의 MVP/생일을 한눈에 */}

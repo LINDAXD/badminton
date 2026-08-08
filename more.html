@@ -193,7 +193,7 @@ function App() {
   const [schedLoc, setSchedLoc] = React.useState("");
   const [schedCapacity, setSchedCapacity] = React.useState("");
   const [showPastSchedule, setShowPastSchedule] = React.useState(false);
-  const [activeView, setActiveView] = React.useState(null); // null | "schedule" | "suggestions" | "admin"
+  const [activeView, setActiveView] = React.useState(() => (window.location.hash === "#schedule" ? "schedule" : null)); // null | "schedule" | "suggestions" | "admin"
   const [paymentInfo, setPaymentInfo] = React.useState(null);
   const [payments, setPayments] = React.useState({});
   const [pfBank, setPfBank] = React.useState("");
