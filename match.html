@@ -720,6 +720,12 @@ function App() {
   // 그러면 다른 코트가 거의 동시에 바뀔 때 서로 씹어먹는 문제가 있었어요(코트마다 따로 끝나는 게 당연한데도요).
   // 트랜잭션으로 항상 최신 데이터를 다시 읽어서, 이 코트 하나만 안전하게 바꿔요.
   async function persistCourtMatches(courtNum, valueOrUpdater) {
+    // 화면은 즉시(로컬) 바로 업데이트해서 "경기 종료" 누른 순간 바로 대기 인원에 반영되게 하고,
+    // 서버 저장은 트랜잭션으로 안전하게 백그라운드에서 처리해요 (다른 코트랑 안 부딪히게).
+    setCourtMatches((prev) => {
+      const newVal = typeof valueOrUpdater === "function" ? valueOrUpdater(prev[courtNum]) : valueOrUpdater;
+      return { ...prev, [courtNum]: newVal };
+    });
     try {
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(REFS.courtmatches);
