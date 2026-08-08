@@ -556,9 +556,9 @@ function App() {
         </div>
       )}
 
-      {/* upcoming schedule + 참석 인원을 한 카드로 합쳐서 붕 떠보이지 않게 — 카드 누르면 바로 참석 체크 화면으로 이동 */}
+      {/* upcoming schedule + 참석 인원을 한 카드로 합쳐서 붕 떠보이지 않게 — 참석/미정/불참 버튼을 카드에 바로 넣어서 이동 없이 바로 체크 가능 */}
       <section className="px-5 max-w-2xl mx-auto mb-4">
-        <a href="./more.html#schedule" className="rise-in bc-card p-4 block tap-scale">
+        <div className="rise-in bc-card p-4">
           <p className="text-[11px] font-semibold text-stone-400 mb-2 tracking-wide">🗓️ 다가오는 모임</p>
           {upcomingList.length === 0 ? (
             <p className="text-sm text-stone-400">예정된 일정이 없어요.</p>
@@ -577,6 +577,36 @@ function App() {
                   <p className="text-[10px] text-stone-400">{isRealToday ? "오늘 참석" : "참석 예정"}</p>
                 </div>
               </div>
+
+              {myId && (() => {
+                const s = upcomingList[0];
+                const myStatus = (s.rsvp || []).find((r) => r.id === myId)?.status || null;
+                return (
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <button
+                      onClick={() => setRsvpFor(s, "in", myId, myName)}
+                      className={`text-xs font-semibold py-2 rounded-xl tap-scale ${myStatus === "in" ? "text-white" : "bg-stone-50 text-stone-500 border border-stone-200"}`}
+                      style={myStatus === "in" ? { backgroundColor: "#4CAF50" } : {}}
+                    >
+                      ✅ 참석
+                    </button>
+                    <button
+                      onClick={() => setRsvpFor(s, "maybe", myId, myName)}
+                      className={`text-xs font-semibold py-2 rounded-xl tap-scale ${myStatus === "maybe" ? "text-white" : "bg-stone-50 text-stone-500 border border-stone-200"}`}
+                      style={myStatus === "maybe" ? { backgroundColor: "#B98900" } : {}}
+                    >
+                      ❓ 미정
+                    </button>
+                    <button
+                      onClick={() => setRsvpFor(s, "out", myId, myName)}
+                      className={`text-xs font-semibold py-2 rounded-xl tap-scale ${myStatus === "out" ? "text-white" : "bg-stone-50 text-stone-500 border border-stone-200"}`}
+                      style={myStatus === "out" ? { backgroundColor: "#C0392B" } : {}}
+                    >
+                      ❌ 불참
+                    </button>
+                  </div>
+                );
+              })()}
 
               <div className="mt-3 pt-3 border-t border-stone-100">
                 {attendingMembers.length === 0 ? (
@@ -613,7 +643,7 @@ function App() {
               )}
             </>
           )}
-        </a>
+        </div>
       </section>
 
       {/* 오늘의 주요 정보 — 투표/이달의 MVP/생일을 한눈에 */}

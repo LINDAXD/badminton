@@ -748,6 +748,62 @@ function useRoster() {
 
 // ---------- 출석 이력 기록 (출석왕 계산용, 하루 1회만 기록) ----------
 // 다들 거의 동시에 참석 체크를 하는 순간이라 충돌 위험이 커요 — 트랜잭션으로 안전하게 처리해요.
+// 일정 RSVP(참석/미정/불참) — 홈, 더보기 어디서든 같은 방식으로 쓸 수 있게 공용 함수로 뺐어요.
+// 트랜잭션으로 처리해요 — 다들 거의 동시에 참석 누르는 순간이라 충돌 위험이 제일 큰 곳이에요.
+async function setRsvpFor(item, status, myId, myName) {
+  if (!myId) {
+    appAlert("참석 체크를 하려면 먼저 홈에서 이름으로 입장해주세요.");
+    return;
+  }
+  let wasIn = false;
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(REFS.schedule);
+      const data = snap.data() || {};
+      const items = data.items || [];
+      const target = items.find((s) => s.id === item.id);
+      const list = (target && target.rsvp) || [];
+      const existing = list.find((r) => r.id === myId);
+      wasIn = existing ? existing.status === "in" : false;
+      const at = existing ? existing.at : Date.now();
+      const nextList = [...list.filter((r) => r.id !== myId), { id: myId, name: myName || "?", status, at }];
+      const nextItems = items.map((s) => (s.id === item.id ? { ...s, rsvp: nextList } : s));
+      tx.set(REFS.schedule, { items: nextItems });
+    });
+  } catch (e) {
+    appAlert("참석 체크에 실패했어요. 다시 시도해주세요.");
+    return;
+  }
+
+  // 오늘 일정에 ✅참석을 누르면 오늘 참석 체크(매칭 대상)도 자동으로 같이 돼요
+  if (item.date === todayStr()) {
+    if (status === "in" && !wasIn) {
+      try {
+        await db.runTransaction(async (tx) => {
+          const checkinSnap = await tx.get(REFS.checkin);
+          const nextRsvp = { ...((checkinSnap.data() || {}).data || {}), [myId]: "in" };
+          tx.set(REFS.checkin, { data: nextRsvp });
+          const logSnap = await tx.get(REFS.checkinlog);
+          const items = (logSnap.data() || {}).items || [];
+          const already = items.some((it) => it.memberId === myId && it.date === todayStr());
+          if (!already) tx.set(REFS.checkinlog, { items: [...items, { id: uid(), memberId: myId, date: todayStr() }] });
+        });
+      } catch (e) {}
+    } else if (status !== "in" && wasIn) {
+      // 참석이었다가 취소(미정/불참)로 바꾸면 참석 체크도 같이 풀려요. 노쇼는 여기서 자동으로 안 매겨요 —
+      // 관리자가 상황 보고 직접 판단해서 부여하는 게 더 정확해서요 (회원 프로필 카드에서 부여 가능).
+      try {
+        await db.runTransaction(async (tx) => {
+          const checkinSnap = await tx.get(REFS.checkin);
+          const nextRsvp = { ...((checkinSnap.data() || {}).data || {}), [myId]: "out" };
+          tx.set(REFS.checkin, { data: nextRsvp });
+        });
+      } catch (e) {}
+      appAlert("참석을 취소하셨어요.");
+    }
+  }
+}
+
 function logAttendance(memberId) {
   if (!memberId) return;
   const today = todayStr();

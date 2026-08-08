@@ -294,63 +294,6 @@ function App() {
     REFS.schedule.set({ items: schedule.filter((s) => s.id !== id) }).catch(() => {});
   }
 
-  async function setRsvpFor(item, status) {
-    if (!myId) {
-      appAlert("참석 체크를 하려면 먼저 홈에서 이름으로 입장해주세요.");
-      window.location.href = "./index.html#login";
-      return;
-    }
-    // 일정 RSVP는 트랜잭션으로 처리해요 — 다들 거의 동시에 참석 누르는 순간이라 충돌 위험이 제일 큰 곳이에요.
-    // 항상 최신 일정 데이터를 다시 읽어서 "내 RSVP 한 줄"만 얹어써서, 다른 사람이 같은 순간에 누른 RSVP가 사라지지 않게 해요.
-    let wasIn = false;
-    try {
-      await db.runTransaction(async (tx) => {
-        const snap = await tx.get(REFS.schedule);
-        const data = snap.data() || {};
-        const items = data.items || [];
-        const target = items.find((s) => s.id === item.id);
-        const list = (target && target.rsvp) || [];
-        const existing = list.find((r) => r.id === myId);
-        wasIn = existing ? existing.status === "in" : false;
-        const at = existing ? existing.at : Date.now();
-        const nextList = [...list.filter((r) => r.id !== myId), { id: myId, name: myName || "?", status, at }];
-        const nextItems = items.map((s) => (s.id === item.id ? { ...s, rsvp: nextList } : s));
-        tx.set(REFS.schedule, { items: nextItems });
-      });
-    } catch (e) {
-      appAlert("참석 체크에 실패했어요. 다시 시도해주세요.");
-      return;
-    }
-
-    // 오늘 일정에 ✅참석을 누르면 오늘 참석 체크(매칭 대상)도 자동으로 같이 돼요
-    if (item.date === todayStr()) {
-      if (status === "in" && !wasIn) {
-        try {
-          await db.runTransaction(async (tx) => {
-            const checkinSnap = await tx.get(REFS.checkin);
-            const nextRsvp = { ...((checkinSnap.data() || {}).data || {}), [myId]: "in" };
-            tx.set(REFS.checkin, { data: nextRsvp });
-            const logSnap = await tx.get(REFS.checkinlog);
-            const items = (logSnap.data() || {}).items || [];
-            const already = items.some((it) => it.memberId === myId && it.date === todayStr());
-            if (!already) tx.set(REFS.checkinlog, { items: [...items, { id: uid(), memberId: myId, date: todayStr() }] });
-          });
-        } catch (e) {}
-      } else if (status !== "in" && wasIn) {
-        // 참석이었다가 취소(미정/불참)로 바꾸면 참석 체크도 같이 풀려요. 노쇼는 여기서 자동으로 안 매겨요 —
-        // 관리자가 상황 보고 직접 판단해서 부여하는 게 더 정확해서요 (회원 프로필 카드에서 부여 가능).
-        try {
-          await db.runTransaction(async (tx) => {
-            const checkinSnap = await tx.get(REFS.checkin);
-            const nextRsvp = { ...((checkinSnap.data() || {}).data || {}), [myId]: "out" };
-            tx.set(REFS.checkin, { data: nextRsvp });
-          });
-        } catch (e) {}
-        appAlert("참석을 취소하셨어요.");
-      }
-    }
-  }
-
   return (
     <RequireLogin myId={myId}>
     <div className="min-h-screen bg-white text-stone-800 font-sans pb-24">
@@ -452,21 +395,21 @@ function App() {
 
                     <div className="flex gap-1.5 mt-2.5">
                       <button
-                        onClick={() => setRsvpFor(s, "in")}
+                        onClick={() => setRsvpFor(s, "in", myId, myName)}
                         className={`flex-1 text-xs font-semibold py-1.5 rounded-lg border tap-scale ${myStatus === "in" ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
                         style={myStatus === "in" ? { backgroundColor: "#4CAF50" } : {}}
                       >
                         ✅ 참석
                       </button>
                       <button
-                        onClick={() => setRsvpFor(s, "maybe")}
+                        onClick={() => setRsvpFor(s, "maybe", myId, myName)}
                         className={`flex-1 text-xs font-semibold py-1.5 rounded-lg border tap-scale ${myStatus === "maybe" ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
                         style={myStatus === "maybe" ? { backgroundColor: "#FFD54F", color: "#5c4a00" } : {}}
                       >
                         ❓ 미정
                       </button>
                       <button
-                        onClick={() => setRsvpFor(s, "out")}
+                        onClick={() => setRsvpFor(s, "out", myId, myName)}
                         className={`flex-1 text-xs font-semibold py-1.5 rounded-lg border tap-scale ${myStatus === "out" ? "text-white border-transparent" : "text-stone-400 border-stone-200"}`}
                         style={myStatus === "out" ? { backgroundColor: "#dc2626" } : {}}
                       >
