@@ -1521,6 +1521,7 @@ function App() {
           )}
 
           <div className="rounded-2xl p-4 text-white relative overflow-hidden" style={{ backgroundColor: "#4CAF50" }}>
+            <Mascot slot="buddy-match" fallback={null} className="text-6xl absolute opacity-90" size={68} style={{ position: "absolute", right: "6px", bottom: "0px" }} />
             <div className="flex items-center justify-between mb-2">
               <p className="text-[11px] uppercase tracking-widest text-white/80">🏸 오늘 운영</p>
               {adminOn && !meetingEndedToday && (

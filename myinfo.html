@@ -141,7 +141,7 @@ function App() {
               {viewMember && viewMember.photoUrl ? (
                 <img src={viewMember.photoUrl} className="w-full h-full object-cover" alt={viewName} />
               ) : (
-                <span className="text-2xl">🏸</span>
+                <Mascot slot="buddy-profile" fallback="🏸" className="text-2xl" size={56} objectFit="cover" />
               )}
             </div>
             <div className="min-w-0">

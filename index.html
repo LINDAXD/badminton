@@ -366,6 +366,13 @@ function App() {
       {/* top greeting card — Toss/당근 스타일: 인사말 + 날짜 + 오늘 현황을 한 초록 카드에 */}
       <header className="px-5 pt-6 pb-5 max-w-2xl mx-auto">
         <div className="rise-in rounded-[28px] p-5 text-white relative overflow-hidden" style={{ background: "linear-gradient(135deg, #52B858 0%, #3C9A45 100%)" }}>
+          <Mascot
+            slot="buddy-hero"
+            fallback="🏸"
+            className="absolute text-6xl opacity-95"
+            size={84}
+            style={{ position: "absolute", right: "8px", bottom: "6px" }}
+          />
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="headfont text-[22px] leading-tight">
