@@ -1044,6 +1044,69 @@ function App() {
     }
   }
 
+  // 지금 경기가 진행 중이어도, 그 코트의 "다음 경기"를 미리 정해둘 수 있어요.
+  // 현재 경기가 끝나는 순간(경기 종료) 자동으로 이 미리 정한 매칭이 바로 시작돼요 — 매번 기다렸다가 다시 매칭할 필요 없이요.
+  const [queueBusy, setQueueBusy] = useState(null);
+  async function queueNextMatch(courtNum) {
+    if (!myId) { appAlert("먼저 홈에서 이름으로 입장해주세요."); return; }
+    if (queueBusy) return;
+    setQueueBusy(courtNum);
+    try {
+      const result = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.courtmatches);
+        const data = snap.data() || {};
+        const current = data.data || {};
+        const existing = current[courtNum];
+        if (!existing || existing.done || existing.date !== todayStr()) {
+          return { ok: false, reason: "notPlaying" };
+        }
+        if (existing.next) {
+          return { ok: false, reason: "alreadyQueued" };
+        }
+        // 지금 이 순간 진짜로 안 뛰고 있는 사람만 (다른 코트 진행 중이거나, 이미 다른 코트의 "다음 경기"로 예약된 사람도 제외)
+        const occupied = new Set();
+        Object.values(current).forEach((m) => {
+          if (m && !m.done && m.date === todayStr()) {
+            [...m.teamA, ...m.teamB].forEach((p) => occupied.add(p.id));
+            if (m.next) [...m.next.teamA, ...m.next.teamB].forEach((p) => occupied.add(p.id));
+          }
+        });
+        const pool = waitingPlayers.filter((p) => !occupied.has(p.id));
+        if (pool.length < 4) {
+          return { ok: false, reason: "notEnough" };
+        }
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        const four = shuffled.slice(0, 4);
+        const queued = { teamA: four.slice(0, 2), teamB: four.slice(2, 4) };
+        const nextData = { ...current, [courtNum]: { ...existing, next: queued } };
+        tx.set(REFS.courtmatches, { data: nextData });
+        return { ok: true };
+      });
+      if (result && result.ok === false) {
+        if (result.reason === "notEnough") appAlert("대기 중인 인원이 4명 미만이에요.");
+        else if (result.reason === "alreadyQueued") appAlert("이미 다음 경기가 정해져 있어요.");
+      }
+    } catch (e) {
+      appAlert("다음 경기 예약에 실패했어요. 다시 시도해주세요.");
+    } finally {
+      setQueueBusy(null);
+    }
+  }
+
+  async function cancelQueuedNext(courtNum) {
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.courtmatches);
+        const data = snap.data() || {};
+        const current = data.data || {};
+        const existing = current[courtNum];
+        if (!existing || !existing.next) return;
+        const { next, ...rest } = existing;
+        tx.set(REFS.courtmatches, { data: { ...current, [courtNum]: rest } });
+      });
+    } catch (e) {}
+  }
+
   function startMatchOnCourt(courtNum) {
     if (!adminOn) {
       tryAdminUnlock();
@@ -1194,6 +1257,7 @@ function App() {
     });
 
     const finished = { ...m, done: true };
+    delete finished.next;
     setHistory((hArr) => [{ ...finished, round: matchSeq }, ...hArr]);
     logMatchResult({
       round: matchSeq,
@@ -1204,7 +1268,11 @@ function App() {
       scoreB: m.scoreB,
     });
 
-    persistCourtMatches({ ...courtMatches, [courtNum]: finished });
+    // 미리 정해둔 "다음 경기"가 있으면, 끝나자마자 바로 그 매칭으로 시작해요. 없으면 예전처럼 빈 코트로 남아요.
+    const nextCourtState = m.next
+      ? { id: uid(), court: courtNum, teamA: m.next.teamA, teamB: m.next.teamB, scoreA: "", scoreB: "", done: false, date: todayStr() }
+      : finished;
+    persistCourtMatches({ ...courtMatches, [courtNum]: nextCourtState });
     markWaiting([...m.teamA, ...m.teamB].map((p) => p.id)); // 방금 끝난 사람들은 지금부터 대기 시작
   }
 
@@ -1722,6 +1790,30 @@ function App() {
                             🔀 팀 다시 섞기
                           </button>
                         )}
+
+                        {/* 🔜 다음 경기 미리 정하기 — 지금 경기가 끝나길 기다리지 않고, 다음 경기 멤버를 미리 정해둘 수 있어요 */}
+                        <div className="pt-2 mt-1 border-t border-stone-100">
+                          {m.next ? (
+                            <div className="bg-stone-50 rounded-xl p-2.5">
+                              <p className="text-[11px] text-stone-400 mb-1">🔜 다음 경기 예약됨</p>
+                              <p className="text-xs text-stone-600">{m.next.teamA[0].name}·{m.next.teamA[1].name} <span className="text-stone-300">vs</span> {m.next.teamB[0].name}·{m.next.teamB[1].name}</p>
+                              {(adminOn || m.next.teamA.some((p) => p.id === myId) || m.next.teamB.some((p) => p.id === myId)) && (
+                                <button onClick={() => cancelQueuedNext(courtNum)} className="text-[11px] text-stone-400 underline underline-offset-2 mt-1">예약 취소</button>
+                              )}
+                            </div>
+                          ) : waitingPlayers.length < 4 ? (
+                            <p className="text-[11px] text-stone-400 text-center">대기 인원이 4명 모이면 다음 경기를 미리 정할 수 있어요.</p>
+                          ) : (
+                            <button
+                              onClick={() => queueNextMatch(courtNum)}
+                              disabled={queueBusy === courtNum}
+                              className="w-full rounded-xl py-2 text-xs font-semibold border disabled:opacity-60"
+                              style={{ borderColor: "#4CAF50", color: "#2E7D32" }}
+                            >
+                              {queueBusy === courtNum ? "정하는 중..." : "🔜 다음 경기 미리 정하기"}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : meetingEndedToday ? (
                       <div className="px-4 pb-4">
