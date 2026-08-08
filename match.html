@@ -305,7 +305,7 @@ function ShuttlecockPanel({ players, myId, adminOn }) {
   const consumed = (dayData.totalReceived != null && dayData.remaining != null) ? dayData.totalReceived - dayData.remaining : null;
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+    <div className="bc-card p-4">
       <p className="text-sm font-semibold mb-1">🏸 셔틀콕 제출 현황 <span className="text-stone-400 font-normal">({submittedCount}/{eligible.length}명)</span></p>
       <p className="text-[11px] text-stone-400 mb-3">
         본인 이름을 눌러서 제출 체크하세요.
@@ -438,7 +438,7 @@ function OpsRecommendation({ waitingPlayers, players, matchhistory, matchMode, i
   if (tips.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+    <div className="bc-card p-4">
       <p className="text-sm font-semibold mb-2">🏸 운영 추천</p>
       <ul className="space-y-1.5">
         {tips.map((t, i) => (
@@ -1257,7 +1257,7 @@ function App() {
       {tab === "players" && (
         <section className="px-5 mt-5 space-y-5">
           {adminOn ? (
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <div className="bc-card p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold flex items-center gap-1">👥 고정 멤버 (관리자용 직접 체크)</p>
               <button
@@ -1375,14 +1375,14 @@ function App() {
             )}
           </div>
           ) : (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200 text-center">
+            <div className="bc-card p-4 text-center">
               <p className="text-sm text-stone-500">✅ 참석 체크는 <b>더보기 → 일정</b>에서 해주세요.</p>
               <p className="text-[11px] text-stone-400 mt-1">여기서는 오늘 참석자와 매칭 현황만 볼 수 있어요.</p>
             </div>
           )}
 
           {adminOn ? (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+            <div className="bc-card p-4">
               <p className="text-sm font-semibold mb-2">사용할 코트 수</p>
               <div className="flex items-center gap-3">
                 <button
@@ -1406,7 +1406,7 @@ function App() {
           )}
 
           {adminOn && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <div className="bc-card p-4">
             <p className="text-sm font-semibold mb-1">🏸 매칭 방식 선택</p>
             <p className="text-[11px] text-stone-400 mb-3">
               {MATCH_MODES.find((m) => m.key === matchMode)?.desc}
@@ -1521,7 +1521,6 @@ function App() {
           )}
 
           <div className="rounded-2xl p-4 text-white relative overflow-hidden" style={{ backgroundColor: "#4CAF50" }}>
-            <Mascot slot="buddy-match" fallback={null} className="text-6xl absolute opacity-90" size={68} style={{ position: "absolute", right: "6px", bottom: "0px" }} />
             <div className="flex items-center justify-between mb-2">
               <p className="text-[11px] uppercase tracking-widest text-white/80">🏸 오늘 운영</p>
               {adminOn && !meetingEndedToday && (
@@ -1780,7 +1779,7 @@ function App() {
             );
           })}
 
-          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <div className="bc-card p-4">
             <p className="text-xs font-semibold text-stone-500 mb-1">다음 경기는 쉴래요</p>
             <p className="text-xs text-stone-400 mb-2">본인 이름은 언제든 누를 수 있고, 관리자는 다른 사람 대신 눌러줄 수도 있어요. 누르면 다음 경기 시작할 때 대기 명단에서 빠져요. 아래 목록은 관리자를 포함해 모두에게 실시간으로 보여요.</p>
             {Object.keys(restWish).length > 0 && (
@@ -1821,7 +1820,7 @@ function App() {
                 .map((p) => ({ ...p, stats: lifetimeStatsFor(p.id) }))
                 .sort((a, b) => b.stats.wins - a.stats.wins || b.stats.games - a.stats.games)
                 .map((p, i) => (
-                  <li key={p.id} className="bg-white rounded-xl px-4 py-3 flex items-center justify-between border border-stone-200">
+                  <li key={p.id} className="bc-card px-4 py-3 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="scorefont text-sm text-stone-400 w-4">{i + 1}</span>
                       <span className="text-sm font-medium">{p.name}</span>
@@ -1854,7 +1853,7 @@ function App() {
             ) : (
               <ul className="space-y-2">
                 {matchhistory.slice(0, 50).map((m) => (
-                  <li key={m.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200 text-sm">
+                  <li key={m.id} className="bc-card px-4 py-3 text-sm">
                     <p className="text-[11px] text-stone-400 mb-1">{m.date} · Court {m.court}</p>
                     <div className="flex justify-between items-center">
                       <span>{m.teamA[0].name}·{m.teamA[1].name}</span>

@@ -329,7 +329,7 @@ function App() {
 
       {showForm && (
         <section className="px-5 max-w-2xl mx-auto mb-4">
-          <div className="bg-white rounded-2xl p-4 border border-stone-200 space-y-2 shadow-sm">
+          <div className="bc-card p-4 space-y-2">
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="오늘 모임 어땠나요? 자유롭게 남겨주세요." className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm h-20" />
             <input type="file" accept="image/*" multiple onChange={(e) => setFiles([...e.target.files])} className="text-xs" />
             {files.length > 0 && <p className="text-[11px] text-stone-400">사진 {files.length}장 선택됨{files.length >= 3 ? " · ✨ 3장 이상이면 홈 화면에 자동으로 소개돼요!" : ""}</p>}

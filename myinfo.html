@@ -117,7 +117,7 @@ function App() {
 
       {adminOn && (
         <section className="px-5 max-w-2xl mx-auto mb-4">
-          <div className="bg-white rounded-2xl p-3 border border-stone-200 flex items-center gap-2">
+          <div className="bc-card p-3 flex items-center gap-2">
             <span className="text-[11px] text-stone-400 shrink-0">🔍 회원 선택 (관리자)</span>
             <select
               value={targetId || ""}
@@ -196,11 +196,11 @@ function App() {
       <section className="px-5 max-w-2xl mx-auto mb-4">
         <p className="text-xs font-bold text-stone-500 mb-2">🎯 로그인 출석 (모임 참석과 별개)</p>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <div className="bc-card p-4">
             <p className="text-[11px] text-stone-400">총 출석일</p>
             <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{loginStats.totalDays}<span className="text-sm text-stone-400 font-normal">일</span></p>
           </div>
-          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <div className="bc-card p-4">
             <p className="text-[11px] text-stone-400">🔥 연속 출석일</p>
             <p className="headfont text-2xl" style={{ color: "#4CAF50" }}>{loginStats.streak}<span className="text-sm text-stone-400 font-normal">일</span></p>
           </div>
@@ -210,7 +210,7 @@ function App() {
       {/* 월간 수상 누적 */}
       <section className="px-5 max-w-2xl mx-auto mb-4">
         <p className="text-xs font-bold text-stone-500 mb-2">🗳️ 월간 수상 누적</p>
-        <div className="bg-white rounded-2xl p-4 border border-stone-200 flex flex-wrap gap-1.5">
+        <div className="bc-card p-4 flex flex-wrap gap-1.5">
           {window.ALL_VOTE_CATEGORIES.map((c) => (
             <span key={c.key} className="text-xs bg-stone-50 border border-stone-200 text-stone-600 rounded-full px-2.5 py-1">
               {c.emoji} {c.label} {cumulativeWins(dailyvotes, viewId, c.key, false)}회
@@ -222,7 +222,7 @@ function App() {
       {/* 획득 배지 */}
       <section className="px-5 max-w-2xl mx-auto mb-4">
         <p className="text-xs font-bold text-stone-500 mb-2">🏆 획득 배지</p>
-        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+        <div className="bc-card p-4">
           {badges.length === 0 ? (
             <p className="text-xs text-stone-400">아직 획득한 배지가 없어요.</p>
           ) : (
@@ -240,7 +240,7 @@ function App() {
       {/* 월별 참석 그래프 */}
       <section className="px-5 max-w-2xl mx-auto mb-6">
         <p className="text-xs font-bold text-stone-500 mb-2">📈 월별 참석 (최근 6개월)</p>
-        <div className="bg-white rounded-2xl p-4 border border-stone-200">
+        <div className="bc-card p-4">
           <div className="flex items-end justify-between gap-2" style={{ height: "100px" }}>
             {monthBuckets.map((b) => (
               <div key={b.key} className="flex-1 flex flex-col items-center justify-end h-full">
@@ -259,7 +259,7 @@ function App() {
         {partners.length === 0 ? (
           <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200">아직 함께 경기한 기록이 없어요.</p>
         ) : (
-          <ul className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
+          <ul className="bc-card divide-y divide-stone-100">
             {partners.map((p, i) => (
               <li key={p.name} className="px-4 py-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -279,7 +279,7 @@ function App() {
         {!ready ? (
           <Skeleton className="h-16 w-full" />
         ) : (
-          <div className="bg-white rounded-2xl p-4 border border-stone-200">
+          <div className="bc-card p-4">
             <div className="flex items-center gap-4 mb-3">
               <div>
                 <p className="headfont text-xl" style={{ color: "#4CAF50" }}>{myMatches.length}</p>
@@ -314,7 +314,7 @@ function App() {
         ) : (
           <ul className="space-y-2">
             {myAttendedSchedule.map((s) => (
-              <li key={s.id} className="bg-white rounded-xl px-4 py-3 border border-stone-200">
+              <li key={s.id} className="bc-card px-4 py-3">
                 <p className="text-sm font-semibold text-stone-800">{s.title}</p>
                 <p className="text-[11px] text-stone-400">{fmtDate(s.date)}{s.time ? ` · ${fmtTime(s.time)}` : ""}{s.location ? ` · ${s.location}` : ""}</p>
               </li>
@@ -345,7 +345,7 @@ function App() {
             })()}
             <ul className="space-y-3">
               {myReviews.map((r) => (
-                <li key={r.id} className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+                <li key={r.id} className="bc-card overflow-hidden">
                   {photosOf(r)[0] && <img src={photosOf(r)[0]} alt="후기 사진" className="w-full max-h-56 object-cover" />}
                   <div className="p-3">
                     {r.text && <p className="text-sm text-stone-700 whitespace-pre-wrap">{r.text}</p>}
