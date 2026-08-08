@@ -193,7 +193,17 @@ function App() {
   const [schedLoc, setSchedLoc] = React.useState("");
   const [schedCapacity, setSchedCapacity] = React.useState("");
   const [showPastSchedule, setShowPastSchedule] = React.useState(false);
-  const [activeView, setActiveView] = React.useState(() => (window.location.hash === "#schedule" ? "schedule" : null)); // null | "schedule" | "suggestions" | "admin"
+  const [activeView, setActiveView] = React.useState(() => (window.location.hash === "#schedule" || window.location.hash === "#create" ? "schedule" : null)); // null | "schedule" | "suggestions" | "admin"
+
+  // 홈에서 "모임 만들기"로 들어온 경우, 일정 화면이 뜨자마자 새 모임 만들기 폼으로 자동 스크롤해줘요
+  React.useEffect(() => {
+    if (window.location.hash === "#create" && activeView === "schedule") {
+      setTimeout(() => {
+        const el = document.getElementById("create-schedule-form");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    }
+  }, [activeView]);
   const [paymentInfo, setPaymentInfo] = React.useState(null);
   const [payments, setPayments] = React.useState({});
   const [pfBank, setPfBank] = React.useState("");
@@ -425,7 +435,7 @@ function App() {
             <p className="text-xs text-stone-400 bg-white rounded-2xl p-4 text-center border border-dashed border-stone-200 mb-2">다가오는 일정이 없어요. "지난 일정 보기"를 눌러보세요.</p>
           )}
           {myId && (
-            <div className="bc-card p-4 space-y-2">
+            <div id="create-schedule-form" className="bc-card p-4 space-y-2">
               <p className="text-sm font-semibold text-stone-700">➕ 새 모임 만들기</p>
               <input value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="일정 제목" className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
               <div className="flex gap-2">
