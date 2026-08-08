@@ -1387,11 +1387,21 @@ function App() {
     persistCourtMatches(courtNum, match);
   }
 
+  // 점수는 타이핑할 때마다 서버 왕복(트랜잭션)을 기다리면 버벅이니까, 화면은 즉시 업데이트하고
+  // 서버 저장은 타이핑이 잠깐 멈췄을 때 한 번만 보내요 (디바운스).
+  const scoreDebounceRef = useRef({});
   function updateScore(courtNum, side, value) {
     if (!/^\d{0,2}$/.test(value)) return;
-    const m = courtMatches[courtNum];
-    if (!m) return;
-    persistCourtMatches(courtNum, { ...m, [side]: value });
+    setCourtMatches((prev) => {
+      const m = prev[courtNum];
+      if (!m) return prev;
+      return { ...prev, [courtNum]: { ...m, [side]: value } };
+    });
+    const key = `${courtNum}-${side}`;
+    clearTimeout(scoreDebounceRef.current[key]);
+    scoreDebounceRef.current[key] = setTimeout(() => {
+      persistCourtMatches(courtNum, (prevRemote) => (prevRemote ? { ...prevRemote, [side]: value } : prevRemote));
+    }, 350);
   }
 
   function finishMatch(courtNum) {
