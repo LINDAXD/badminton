@@ -1892,21 +1892,20 @@ function App() {
                       <p className="text-xs text-stone-400">🔒 이 코트는 잠겨있어요.</p>
                     ) : !adminOn ? (
                       <>
-                        {waitingPlayers.length < 4 ? (
-                          <p className="text-xs text-stone-400">이 코트는 비어있어요. 대기 인원이 모이면 🎲 랜덤 매칭을 눌러 직접 시작할 수 있어요.</p>
-                        ) : (
-                          <>
-                            <p className="text-xs text-stone-400">이 코트는 비어있어요. 지금 대기 중인 인원으로 바로 시작할 수 있어요.</p>
-                            <button
-                              onClick={() => startRandomMatchAsMember(courtNum)}
-                              disabled={randomBusy === courtNum}
-                              className="w-full rounded-xl py-3 font-semibold text-sm text-white active:scale-[0.98] transition disabled:opacity-60"
-                              style={{ backgroundColor: "#FFD54F", color: "#5c4a00" }}
-                            >
-                              {randomBusy === courtNum ? "생성 중..." : "🎲 랜덤 매칭으로 시작"}
-                            </button>
-                          </>
+                        <p className="text-xs text-stone-400">이 코트는 비어있어요.</p>
+                        {waitingPlayers.length < 4 && (
+                          <p className="text-xs font-medium" style={{ color: "#B98900" }}>
+                            ⚠️ {4 - waitingPlayers.length}명이 더 필요해요 (대기 {waitingPlayers.length}명 / 4명)
+                          </p>
                         )}
+                        <button
+                          onClick={() => startRandomMatchAsMember(courtNum)}
+                          disabled={randomBusy === courtNum || waitingPlayers.length < 4}
+                          className="w-full rounded-xl py-3 font-semibold text-sm active:scale-[0.98] transition disabled:opacity-40 disabled:bg-stone-200 disabled:text-stone-400"
+                          style={waitingPlayers.length >= 4 ? { backgroundColor: "#FFD54F", color: "#5c4a00" } : {}}
+                        >
+                          {randomBusy === courtNum ? "생성 중..." : "🎲 랜덤 매칭으로 시작"}
+                        </button>
                       </>
                     ) : !isManualHere ? (
                       <>
@@ -2086,18 +2085,20 @@ function App() {
                       </div>
                     ) : !adminOn ? (
                       <div className="px-4 pb-4 space-y-2">
-                        {waitingPlayers.length < 4 ? (
-                          <p className="text-xs text-stone-400 text-center">경기가 끝났어요. 대기 인원이 모이면 🎲 랜덤 매칭을 눌러 직접 시작할 수 있어요.</p>
-                        ) : (
-                          <button
-                            onClick={() => startRandomMatchAsMember(courtNum)}
-                            disabled={randomBusy === courtNum}
-                            className="w-full rounded-xl py-2.5 font-semibold text-sm active:scale-[0.98] transition disabled:opacity-60"
-                            style={{ backgroundColor: "#FFD54F", color: "#5c4a00" }}
-                          >
-                            {randomBusy === courtNum ? "생성 중..." : "🎲 랜덤 매칭으로 시작"}
-                          </button>
+                        <p className="text-xs text-stone-400 text-center">경기가 끝났어요.</p>
+                        {waitingPlayers.length < 4 && (
+                          <p className="text-xs font-medium text-center" style={{ color: "#B98900" }}>
+                            ⚠️ {4 - waitingPlayers.length}명이 더 필요해요 (대기 {waitingPlayers.length}명 / 4명)
+                          </p>
                         )}
+                        <button
+                          onClick={() => startRandomMatchAsMember(courtNum)}
+                          disabled={randomBusy === courtNum || waitingPlayers.length < 4}
+                          className="w-full rounded-xl py-2.5 font-semibold text-sm active:scale-[0.98] transition disabled:opacity-40 disabled:bg-stone-200 disabled:text-stone-400"
+                          style={waitingPlayers.length >= 4 ? { backgroundColor: "#FFD54F", color: "#5c4a00" } : {}}
+                        >
+                          {randomBusy === courtNum ? "생성 중..." : "🎲 랜덤 매칭으로 시작"}
+                        </button>
                       </div>
                     ) : !isManualHere ? (
                       <div className="px-4 pb-4 space-y-2">
