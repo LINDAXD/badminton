@@ -250,6 +250,23 @@ const MATCH_MODES = [
 
 // 🏸 셔틀콕 관리 — 참석이랑은 별개예요. 참석자마다 "제출함/안함"만 간단히 체크하고,
 // 총 몇 개 받았는지·게임 후 몇 개 멀쩡한지는 관리자가 직접 숫자로 입력해요.
+// 숫자 직접 타이핑 대신, 휠처럼 스크롤해서 고르는 선택 상자예요 (모바일에서 select는 기본적으로 스크롤 목록으로 떠요).
+function NumberSelect({ value, onChange, max, disabled, placeholder, unit }) {
+  return (
+    <select
+      value={value == null ? "" : value}
+      onChange={(e) => onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))}
+      disabled={disabled}
+      className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm bg-white disabled:bg-stone-100 disabled:text-stone-400"
+    >
+      <option value="">{placeholder || "선택"}</option>
+      {Array.from({ length: (max || 99) + 1 }, (_, i) => (
+        <option key={i} value={i}>{i}{unit != null ? unit : "개"}</option>
+      ))}
+    </select>
+  );
+}
+
 function ShuttlecockPanel({ players, myId, adminOn }) {
   const [dayData, setDayData] = useState({ submitted: {}, exempt: {}, totalReceived: null, remaining: null });
   useEffect(() => {
@@ -291,8 +308,7 @@ function ShuttlecockPanel({ players, myId, adminOn }) {
 
   function setNumberField(field, val) {
     if (!adminOn) return;
-    const n = val === "" ? null : Math.max(0, parseInt(val, 10) || 0);
-    patchToday((today) => ({ ...today, [field]: n }));
+    patchToday((today) => ({ ...today, [field]: val }));
   }
 
   if (players.length === 0) return null;
@@ -356,22 +372,20 @@ function ShuttlecockPanel({ players, myId, adminOn }) {
         <div className="pt-3 border-t border-stone-100 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-stone-500 shrink-0 w-24">오늘 총 받은 개수</span>
-            <input
-              type="number" inputMode="numeric" min="0"
-              value={dayData.totalReceived == null ? "" : dayData.totalReceived}
-              onChange={(e) => setNumberField("totalReceived", e.target.value)}
-              placeholder="숫자 입력"
-              className="flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+            <NumberSelect
+              value={dayData.totalReceived}
+              onChange={(v) => setNumberField("totalReceived", v)}
+              max={60}
+              placeholder="개수 선택"
             />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-stone-500 shrink-0 w-24">게임 후 멀쩡한 콕</span>
-            <input
-              type="number" inputMode="numeric" min="0"
-              value={dayData.remaining == null ? "" : dayData.remaining}
-              onChange={(e) => setNumberField("remaining", e.target.value)}
-              placeholder="숫자 입력"
-              className="flex-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm"
+            <NumberSelect
+              value={dayData.remaining}
+              onChange={(v) => setNumberField("remaining", v)}
+              max={60}
+              placeholder="개수 선택"
             />
           </div>
           {consumed != null && (
@@ -472,6 +486,18 @@ function App() {
   const backupInputRef = useRef(null);
   const [numCourts, setNumCourts] = useState(2);
   const [meetingEndedDate, setMeetingEndedDate] = useState(null);
+  const [autoStart, setAutoStart] = useState(true);
+
+  // 오늘 운영 카드에서 셔틀콕 제출 현황도 같이 보여주려고, 여기서도 살짝 구독해요 (셔틀콕 패널이랑 매칭 화면이 따로 놀지 않게).
+  const [shuttlecockToday, setShuttlecockToday] = useState({ submitted: {}, exempt: {} });
+  useEffect(() => {
+    const unsub = REFS.shuttlecock.onSnapshot((snap) => {
+      const data = snap.data();
+      const all = (data && data.data) || {};
+      setShuttlecockToday(all[todayStr()] || { submitted: {}, exempt: {} });
+    }, () => {});
+    return () => unsub();
+  }, []);
   const [hist, setHist] = useState(buildHistory());
   const [courtMatches, setCourtMatches] = useState({}); // { [courtNumber]: match | null }
   const [matchSeq, setMatchSeq] = useState(0);
@@ -568,6 +594,7 @@ function App() {
       setSkillRankOffset((data && data.skillRankOffset) || 0);
       if (data && data.numCourts) setNumCourts(data.numCourts);
       setMeetingEndedDate((data && data.meetingEndedDate) || null);
+      setAutoStart(data && data.autoStart !== undefined ? data.autoStart : true);
     }, () => {});
 
     const unsub9 = REFS.kindvotes.onSnapshot((snap) => {
@@ -604,6 +631,7 @@ function App() {
       skillRankOffset: patch.skillRankOffset !== undefined ? patch.skillRankOffset : skillRankOffset,
       numCourts: patch.numCourts !== undefined ? patch.numCourts : numCourts,
       meetingEndedDate: patch.meetingEndedDate !== undefined ? patch.meetingEndedDate : meetingEndedDate,
+      autoStart: patch.autoStart !== undefined ? patch.autoStart : autoStart,
     };
     setMatchMode(next.mode);
     setExcluded(next.excluded);
@@ -612,13 +640,18 @@ function App() {
     setSkillRankOffset(next.skillRankOffset);
     setNumCourts(next.numCourts);
     setMeetingEndedDate(next.meetingEndedDate);
+    setAutoStart(next.autoStart);
     REFS.matchmode.set(next).catch(() => {});
   }
 
   const meetingEndedToday = meetingEndedDate === todayStr();
   async function endTodayMeeting() {
     if (!adminOn) return;
-    if (!(await appConfirm("오늘 모임을 마칠까요? 이후 새 경기 시작이 막히고, 다들 투표하라는 안내가 떠요."))) return;
+    const eligibleCount = players.filter((p) => !shuttlecockToday.exempt || !shuttlecockToday.exempt[p.id]).length;
+    const submittedCount = players.filter((p) => shuttlecockToday.submitted && shuttlecockToday.submitted[p.id]).length;
+    const notSubmitted = eligibleCount - submittedCount;
+    const warn = notSubmitted > 0 ? `\n\n🏸 아직 셔틀콕 안 낸 사람이 ${notSubmitted}명 있어요.` : "";
+    if (!(await appConfirm(`오늘 모임을 마칠까요? 이후 새 경기 시작이 막히고, 다들 투표하라는 안내가 떠요.${warn}`))) return;
     persistMatchSettings({ meetingEndedDate: todayStr() });
   }
   function reopenTodayMeeting() {
@@ -752,6 +785,37 @@ function App() {
   const tierBadge = { 상: { emoji: "🔥", color: "text-red-500" }, 중: { emoji: "➖", color: "text-stone-400" }, 하: { emoji: "🌱", color: "text-green-600" } };
 
   // 관리자가 개인 전적을 직접 원하는 값으로 고쳐요 (실제 경기기록은 그대로 두고, 보정값만 얹어요)
+  // 개별 경기 기록의 점수를 직접 고쳐요 — 이렇게 하면 그 경기가 걸려있는 승/패, 통산 순위도 자동으로 같이 맞춰져요
+  // (따로 "승/패 보정"을 안 해도, 애초에 원인이 되는 점수 자체를 고치는 게 더 정확해요).
+  async function editMatchRecord(m, field, value) {
+    if (!adminOn) return;
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.matchhistory);
+        const data = snap.data() || {};
+        const items = (data.items || []).map((it) => it.id === m.id ? { ...it, [field]: value } : it);
+        tx.set(REFS.matchhistory, { items });
+      });
+    } catch (e) {
+      appAlert("점수 수정에 실패했어요. 다시 시도해주세요.");
+    }
+  }
+
+  async function deleteMatchRecord(m) {
+    if (!adminOn) return;
+    if (!(await appConfirm(`${m.date} · Court ${m.court} 경기 기록을 삭제할까요? 되돌릴 수 없어요.`))) return;
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.matchhistory);
+        const data = snap.data() || {};
+        const items = (data.items || []).filter((it) => it.id !== m.id);
+        tx.set(REFS.matchhistory, { items });
+      });
+    } catch (e) {
+      appAlert("삭제에 실패했어요. 다시 시도해주세요.");
+    }
+  }
+
   async function correctPlayerStats(p) {
     const current = lifetimeStatsFor(p.id);
     const winInput = await appPrompt(`${p.name}님의 정확한 승 수를 입력해주세요`, String(current.wins));
@@ -980,6 +1044,27 @@ function App() {
 
   const matchCtx = { hist, skillOf, mode: matchMode, todayPairCount, isFirstTimer, isKindOrStrong };
 
+  // 나 지금 뭐 하고 있는지 — 코트 하나하나 뒤질 필요 없이 한눈에 보여주기 위한 계산이에요.
+  const myStatus = (() => {
+    if (!myId) return null;
+    for (const [courtNum, m] of Object.entries(courtMatches)) {
+      if (!m || m.done || m.date !== todayStr()) continue;
+      const inCurrent = [...m.teamA, ...m.teamB].some((p) => p.id === myId);
+      if (inCurrent) {
+        const teammate = [...m.teamA, ...m.teamB].find((p) => p.id !== myId && (m.teamA.some((x) => x.id === myId) ? m.teamA.some((x) => x.id === p.id) : m.teamB.some((x) => x.id === p.id)));
+        return { type: "playing", court: courtNum, teammate: teammate ? teammate.name : "" };
+      }
+      if (m.next) {
+        const inNext = [...m.next.teamA, ...m.next.teamB].some((p) => p.id === myId);
+        if (inNext) return { type: "queued", court: courtNum };
+      }
+    }
+    const idx = waitingPlayers.findIndex((p) => p.id === myId);
+    if (idx >= 0) return { type: "waiting", position: idx + 1, soon: idx < 4 };
+    if (players.some((p) => p.id === myId)) return { type: "resting" };
+    return { type: "notCheckedIn" };
+  })();
+
   // 실력전 모드: 대기 중인 사람을 실력순으로 줄세운 뒤, 4명씩 블록으로 나눠서 코트를 배정해요.
   // 블록 경계는 매번 한 칸씩 밀려서(오프셋 회전) 매번 같은 조합만 반복되지 않게 해요.
   // (예: 이번엔 1-4위/5-8위, 다음엔 2-5위/6-9위 ... 이렇게 밀리다 보면 1위와 8위가 한 그룹이 될 수도 있는데,
@@ -1106,6 +1191,24 @@ function App() {
       });
     } catch (e) {}
   }
+
+  // 대기 인원이 4명 차면, 빈 코트가 있을 때 아무도 안 눌러도 자동으로 매칭을 시작해요 (관리자가 끌 수 있어요).
+  // 여러 사람이 동시에 이 화면을 보고 있어도, startRandomMatchAsMember 자체가 트랜잭션이라 중복 생성은 안 돼요.
+  const autoStartInFlight = useRef(false);
+  useEffect(() => {
+    if (!autoStart || !myId || meetingEndedToday || randomBusy || autoStartInFlight.current) return;
+    if (waitingPlayers.length < 4) return;
+    const freeCourt = Array.from({ length: numCourts }, (_, i) => i + 1).find((n) => {
+      if (lockedCourts.includes(n)) return false;
+      const m = courtMatches[n];
+      return !m || m.done || m.date !== todayStr();
+    });
+    if (!freeCourt) return;
+    autoStartInFlight.current = true;
+    startRandomMatchAsMember(freeCourt).finally(() => {
+      setTimeout(() => { autoStartInFlight.current = false; }, 1500);
+    });
+  }, [autoStart, waitingPlayers.length, courtMatches, numCourts, lockedCourts, meetingEndedToday, myId]);
 
   function startMatchOnCourt(courtNum) {
     if (!adminOn) {
@@ -1473,6 +1576,22 @@ function App() {
                 </button>
                 <span className="text-xs text-stone-400">(최대 {maxCourts || 0}면 · 4명당 1코트)</span>
               </div>
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-stone-100">
+                <div>
+                  <p className="text-xs font-semibold text-stone-700">🤖 자동 매칭 시작</p>
+                  <p className="text-[11px] text-stone-400">대기 4명 차고 빈 코트 있으면 자동으로 시작해요</p>
+                </div>
+                <button
+                  onClick={() => persistMatchSettings({ autoStart: !autoStart })}
+                  className="w-11 h-6 rounded-full relative tap-scale shrink-0"
+                  style={{ backgroundColor: autoStart ? "#4CAF50" : "#e5e5e5" }}
+                >
+                  <span
+                    className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
+                    style={{ left: autoStart ? "22px" : "2px" }}
+                  />
+                </button>
+              </div>
             </div>
           ) : (
             <p className="text-xs text-stone-400 text-center">코트 {numCourts}면 운영 중 · {MATCH_MODES.find((m) => m.key === matchMode)?.label || "⚖️ 균형"} 모드</p>
@@ -1480,21 +1599,20 @@ function App() {
 
           {adminOn && (
           <div className="bc-card p-4">
-            <p className="text-sm font-semibold mb-1">🏸 매칭 방식 선택</p>
-            <p className="text-[11px] text-stone-400 mb-3">
-              {MATCH_MODES.find((m) => m.key === matchMode)?.desc}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {MATCH_MODES.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => adminOn ? persistMatchSettings({ mode: opt.key }) : tryAdminUnlock()}
-                  className={`py-3 rounded-xl text-sm font-semibold tap-scale border ${matchMode === opt.key ? "text-white border-transparent" : "bg-stone-50 text-stone-500 border-stone-200"}`}
-                  style={matchMode === opt.key ? { backgroundColor: "#4CAF50" } : {}}
-                >
-                  {opt.label}
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">🏸 매칭 방식</p>
+                <p className="text-[11px] text-stone-400 mt-0.5 truncate">{MATCH_MODES.find((m) => m.key === matchMode)?.desc}</p>
+              </div>
+              <select
+                value={matchMode}
+                onChange={(e) => persistMatchSettings({ mode: e.target.value })}
+                className="text-sm border border-stone-200 rounded-lg px-2 py-1.5 shrink-0 ml-2"
+              >
+                {MATCH_MODES.map((opt) => (
+                  <option key={opt.key} value={opt.key}>{opt.label}</option>
+                ))}
+              </select>
             </div>
           </div>
           )}
@@ -1580,6 +1698,44 @@ function App() {
 
       {tab === "match" && (
         <section className="px-5 mt-5 space-y-4">
+          {myStatus && !meetingEndedToday && (
+            <div className="rounded-2xl p-4 flex items-center gap-3" style={{ backgroundColor: "#F0FBF1", border: "1px solid #D5EEDB" }}>
+              {myStatus.type === "playing" && (
+                <>
+                  <span className="text-2xl">🏸</span>
+                  <p className="text-sm text-stone-700"><b>코트 {myStatus.court}</b>에서 {myStatus.teammate ? <>{myStatus.teammate}님과 </> : ""}경기 중이에요!</p>
+                </>
+              )}
+              {myStatus.type === "queued" && (
+                <>
+                  <span className="text-2xl">🔜</span>
+                  <p className="text-sm text-stone-700">다음 경기로 <b>코트 {myStatus.court}</b>에 예약돼 있어요.</p>
+                </>
+              )}
+              {myStatus.type === "waiting" && (
+                <>
+                  <span className="text-2xl">{myStatus.soon ? "⏱️" : "⏳"}</span>
+                  <p className="text-sm text-stone-700">
+                    현재 대기 <b>{myStatus.position}번째</b>
+                    {myStatus.soon ? " — 곧 코트가 배정될 거예요!" : "예요."}
+                  </p>
+                </>
+              )}
+              {myStatus.type === "resting" && (
+                <>
+                  <span className="text-2xl">☕</span>
+                  <p className="text-sm text-stone-700">쉬는 중으로 설정되어 있어요. 다시 뛰고 싶으면 참석자 관리에서 해제해주세요.</p>
+                </>
+              )}
+              {myStatus.type === "notCheckedIn" && (
+                <>
+                  <span className="text-2xl">🙋</span>
+                  <p className="text-sm text-stone-700">아직 오늘 참석 체크가 안 됐어요. 홈에서 참석 체크부터 해주세요!</p>
+                </>
+              )}
+            </div>
+          )}
+
           {meetingEndedToday && (
             <div className="rounded-2xl p-4 text-center" style={{ backgroundColor: "#FFFBEA", border: "1px solid #FFD54F" }}>
               <p className="text-sm font-bold" style={{ color: "#B98900" }}>🏁 오늘 모임이 종료됐어요</p>
@@ -1620,9 +1776,25 @@ function App() {
                 <p className="text-sm font-semibold leading-snug">{waitingPlayers.slice(0, 4).map((p) => p.name).join(", ") || "-"}</p>
               </div>
             </div>
+            {(() => {
+              const eligibleCount = players.filter((p) => !shuttlecockToday.exempt || !shuttlecockToday.exempt[p.id]).length;
+              const submittedCount = players.filter((p) => shuttlecockToday.submitted && shuttlecockToday.submitted[p.id]).length;
+              const notSubmitted = eligibleCount - submittedCount;
+              if (eligibleCount === 0 || notSubmitted <= 0) return null;
+              return (
+                <a
+                  href="#shuttlecock-panel"
+                  className="mt-3 flex items-center justify-between rounded-xl px-3 py-2 text-xs"
+                  style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+                >
+                  <span>🏸 셔틀콕 아직 {notSubmitted}명 제출 안 함</span>
+                  <span className="underline">확인하기 ↓</span>
+                </a>
+              );
+            })()}
           </div>
 
-          <ShuttlecockPanel players={players} myId={myId} adminOn={adminOn} />
+          <div id="shuttlecock-panel"><ShuttlecockPanel players={players} myId={myId} adminOn={adminOn} /></div>
 
           {adminOn && <OpsRecommendation waitingPlayers={waitingPlayers} players={players} matchhistory={matchhistory} matchMode={matchMode} isFirstTimer={isFirstTimer} roster={roster} />}
 
@@ -1951,11 +2123,24 @@ function App() {
               <ul className="space-y-2">
                 {matchhistory.slice(0, 50).map((m) => (
                   <li key={m.id} className="bc-card px-4 py-3 text-sm">
-                    <p className="text-[11px] text-stone-400 mb-1">{m.date} · Court {m.court}</p>
-                    <div className="flex justify-between items-center">
-                      <span>{m.teamA[0].name}·{m.teamA[1].name}</span>
-                      <span className="scorefont font-semibold">{m.scoreA} : {m.scoreB}</span>
-                      <span>{m.teamB[0].name}·{m.teamB[1].name}</span>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[11px] text-stone-400">{m.date} · Court {m.court}</p>
+                      {adminOn && (
+                        <button onClick={() => deleteMatchRecord(m)} className="text-[11px] text-red-400 underline underline-offset-2">삭제</button>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="truncate">{m.teamA[0].name}·{m.teamA[1].name}</span>
+                      {adminOn ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <NumberSelect value={m.scoreA === "" ? null : Number(m.scoreA)} onChange={(v) => editMatchRecord(m, "scoreA", v == null ? "" : String(v))} max={30} placeholder="-" unit="" />
+                          <span className="text-stone-400">:</span>
+                          <NumberSelect value={m.scoreB === "" ? null : Number(m.scoreB)} onChange={(v) => editMatchRecord(m, "scoreB", v == null ? "" : String(v))} max={30} placeholder="-" unit="" />
+                        </div>
+                      ) : (
+                        <span className="scorefont font-semibold shrink-0">{m.scoreA} : {m.scoreB}</span>
+                      )}
+                      <span className="truncate text-right">{m.teamB[0].name}·{m.teamB[1].name}</span>
                     </div>
                   </li>
                 ))}
