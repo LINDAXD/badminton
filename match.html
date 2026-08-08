@@ -716,9 +716,23 @@ function App() {
   }
 
   // 코트별 진행중인 경기를 로컬 상태 + Firestore에 같이 저장해서, 다른 사람 화면에도 실시간으로 보여요
-  function persistCourtMatches(next) {
-    setCourtMatches(next);
-    REFS.courtmatches.set({ data: next }).catch(() => {});
+  // 코트 하나의 상태만 안전하게 바꿔요 — 예전엔 "지금 내가 알고 있는 전체 코트 현황"을 통째로 덮어썼는데,
+  // 그러면 다른 코트가 거의 동시에 바뀔 때 서로 씹어먹는 문제가 있었어요(코트마다 따로 끝나는 게 당연한데도요).
+  // 트랜잭션으로 항상 최신 데이터를 다시 읽어서, 이 코트 하나만 안전하게 바꿔요.
+  async function persistCourtMatches(courtNum, valueOrUpdater) {
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.courtmatches);
+        const data = snap.data() || {};
+        const current = data.data || {};
+        const prev = current[courtNum];
+        const newVal = typeof valueOrUpdater === "function" ? valueOrUpdater(prev) : valueOrUpdater;
+        const next = { ...current, [courtNum]: newVal };
+        tx.set(REFS.courtmatches, { data: next });
+      });
+    } catch (e) {
+      appAlert("반영에 실패했어요. 다시 시도해주세요.");
+    }
   }
 
   // 오늘 몇 경기 했는지 — matchhistory(공유 저장소) 기준이라 기기 상관없이 다 같이 봐요
@@ -1076,7 +1090,11 @@ function App() {
       }
       if (m.next) {
         const inNext = [...m.next.teamA, ...m.next.teamB].some((p) => p.id === myId);
-        if (inNext) return { type: "queued", court: courtNum };
+        if (inNext) {
+          const nextTeammate = [...m.next.teamA, ...m.next.teamB].find((p) => p.id !== myId && (m.next.teamA.some((x) => x.id === myId) ? m.next.teamA.some((x) => x.id === p.id) : m.next.teamB.some((x) => x.id === p.id)));
+          const nextOpponents = (m.next.teamA.some((x) => x.id === myId) ? m.next.teamB : m.next.teamA).map((p) => p.name);
+          return { type: "queued", court: courtNum, teammate: nextTeammate ? nextTeammate.name : "", opponents: nextOpponents };
+        }
       }
     }
     const idx = waitingPlayers.findIndex((p) => p.id === myId);
@@ -1118,7 +1136,7 @@ function App() {
     if (already) { appAlert("이미 이 경기에 들어가 있는 선수예요."); return; }
     const swap = (team) => team.map((p) => (p.id === oldPlayerId ? { id: newPlayer.id, name: newPlayer.name } : p));
     const updated = { ...m, teamA: swap(m.teamA), teamB: swap(m.teamB) };
-    persistCourtMatches({ ...courtMatches, [courtNum]: updated });
+    persistCourtMatches(courtNum, updated);
     setEditingCourt(null);
   }
   async function startRandomMatchAsMember(courtNum) {
@@ -1275,7 +1293,7 @@ function App() {
     const four = pickFourForCourt();
     const { a, b } = splitScore(four, matchCtx);
     const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false, date: todayStr() };
-    persistCourtMatches({ ...courtMatches, [courtNum]: match });
+    persistCourtMatches(courtNum, match);
     if (matchMode === "skill") persistMatchSettings({ skillRankOffset: skillRankOffset + 1 });
     setMatchSeq((n) => n + 1);
     setTab("match");
@@ -1326,7 +1344,7 @@ function App() {
       ({ a, b } = splitScore(four, matchCtx));
     }
     const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false, date: todayStr() };
-    persistCourtMatches({ ...courtMatches, [courtNum]: match });
+    persistCourtMatches(courtNum, match);
     setMatchSeq((n) => n + 1);
     setManualCourt(null);
     setManualSelected([]);
@@ -1366,14 +1384,14 @@ function App() {
     const four = [...m.teamA, ...m.teamB];
     const { a, b } = splitScore(four, matchCtx);
     const match = { ...m, teamA: a, teamB: b, scoreA: "", scoreB: "" };
-    persistCourtMatches({ ...courtMatches, [courtNum]: match });
+    persistCourtMatches(courtNum, match);
   }
 
   function updateScore(courtNum, side, value) {
     if (!/^\d{0,2}$/.test(value)) return;
     const m = courtMatches[courtNum];
     if (!m) return;
-    persistCourtMatches({ ...courtMatches, [courtNum]: { ...m, [side]: value } });
+    persistCourtMatches(courtNum, { ...m, [side]: value });
   }
 
   function finishMatch(courtNum) {
@@ -1420,7 +1438,7 @@ function App() {
     const nextCourtState = m.next
       ? { id: uid(), court: courtNum, teamA: m.next.teamA, teamB: m.next.teamB, scoreA: "", scoreB: "", done: false, date: todayStr() }
       : finished;
-    persistCourtMatches({ ...courtMatches, [courtNum]: nextCourtState });
+    persistCourtMatches(courtNum, nextCourtState);
     markWaiting([...m.teamA, ...m.teamB].map((p) => p.id)); // 방금 끝난 사람들은 지금부터 대기 시작
   }
 
@@ -1754,7 +1772,11 @@ function App() {
               {myStatus.type === "queued" && (
                 <>
                   <span className="text-2xl">🔜</span>
-                  <p className="text-sm text-stone-700">다음 경기로 <b>코트 {myStatus.court}</b>에 예약돼 있어요.</p>
+                  <p className="text-sm text-stone-700">
+                    다음 경기로 <b>코트 {myStatus.court}</b>에 예약돼 있어요
+                    {myStatus.teammate && <>, <b>{myStatus.teammate}</b>님과 한 팀이에요</>}
+                    {myStatus.opponents && myStatus.opponents.length > 0 && <> (상대: {myStatus.opponents.join(", ")})</>}
+                  </p>
                 </>
               )}
               {myStatus.type === "waiting" && (
