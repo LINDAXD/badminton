@@ -576,7 +576,19 @@ function App() {
 
     const unsub6 = REFS.courtmatches.onSnapshot((snap) => {
       const data = snap.data();
-      setCourtMatches(data && data.data ? data.data : {});
+      const incoming = data && data.data ? data.data : {};
+      // 지금 타이핑 중(아직 서버에 저장 안 됨)인 점수 칸은, 실시간 동기화가 와도 덮어쓰지 않고 그대로 둬요.
+      // (다른 코트에서 뭔가 바뀔 때마다 전체가 새로고침되면서, 내가 입력 중인 값이 순간적으로 지워졌다 복구되는 문제 방지)
+      setCourtMatches((prev) => {
+        const merged = { ...incoming };
+        Object.keys(dirtyScoreFieldsRef.current).forEach((key) => {
+          const [cn, side] = key.split("|");
+          if (merged[cn] && prev[cn] && prev[cn][side] !== undefined) {
+            merged[cn] = { ...merged[cn], [side]: prev[cn][side] };
+          }
+        });
+        return merged;
+      });
     }, () => {});
 
     const unsub7 = REFS.checkinlog.onSnapshot((snap) => {
@@ -1145,6 +1157,33 @@ function App() {
     persistCourtMatches(courtNum, updated);
     setEditingCourt(null);
   }
+
+  // 대기자가 없어도 고칠 수 있게 — 다른 코트에서 뛰고 있는 사람이랑 자리를 맞바꿔요 (두 코트 다 한 번에, 안전하게).
+  async function swapPlayerAcrossCourts(courtA, playerAId, courtB, playerBId) {
+    if (!adminOn) return;
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(REFS.courtmatches);
+        const data = snap.data() || {};
+        const current = data.data || {};
+        const matchA = current[courtA];
+        const matchB = current[courtB];
+        if (!matchA || !matchB) return;
+        const playerA = [...matchA.teamA, ...matchA.teamB].find((p) => p.id === playerAId);
+        const playerB = [...matchB.teamA, ...matchB.teamB].find((p) => p.id === playerBId);
+        if (!playerA || !playerB) return;
+        const swapIn = (team, oldId, newP) => team.map((p) => (p.id === oldId ? { id: newP.id, name: newP.name } : p));
+        const newMatchA = { ...matchA, teamA: swapIn(matchA.teamA, playerAId, playerB), teamB: swapIn(matchA.teamB, playerAId, playerB) };
+        const newMatchB = { ...matchB, teamA: swapIn(matchB.teamA, playerBId, playerA), teamB: swapIn(matchB.teamB, playerBId, playerA) };
+        const next = { ...current, [courtA]: newMatchA, [courtB]: newMatchB };
+        tx.set(REFS.courtmatches, { data: next });
+      });
+      setEditingCourt(null);
+    } catch (e) {
+      appAlert("자리 교환에 실패했어요. 다시 시도해주세요.");
+    }
+  }
+
   async function startRandomMatchAsMember(courtNum) {
     if (!myId) { appAlert("먼저 홈에서 이름으로 입장해주세요."); return; }
     if (meetingEndedToday) { appAlert("오늘 모임이 이미 종료됐어요."); return; }
@@ -1169,9 +1208,12 @@ function App() {
         if (pool.length < 4) {
           return { ok: false, reason: "notEnough" };
         }
-        const shuffled = [...pool].sort(() => Math.random() - 0.5);
-        const four = shuffled.slice(0, 4);
-        const match = { id: uid(), court: courtNum, teamA: four.slice(0, 2), teamB: four.slice(2, 4), scoreA: "", scoreB: "", done: false, date: todayStr() };
+        // 진짜 무작위로 4명을 뽑아요 (오래 기다린 순서 안 따짐) — "랜덤 매칭"이니까요.
+        // 팀을 나눌 때만 최근 파트너/상대 겹침을 피하는 쪽으로 골라요 — 완전 무작위로 나누면
+        // 사람이 적을 때 자꾸 같은 조합이 반복될 수 있어서요.
+        const four = [...pool].sort(() => Math.random() - 0.5).slice(0, 4);
+        const { a, b } = splitScore(four, matchCtx);
+        const match = { id: uid(), court: courtNum, teamA: a, teamB: b, scoreA: "", scoreB: "", done: false, date: todayStr() };
         const next = { ...current, [courtNum]: match };
         tx.set(REFS.courtmatches, { data: next });
         return { ok: true };
@@ -1229,9 +1271,9 @@ function App() {
         if (pool.length < 4) {
           return { ok: false, reason: "notEnough" };
         }
-        const shuffled = [...pool].sort(() => Math.random() - 0.5);
-        const four = shuffled.slice(0, 4);
-        const queued = { teamA: four.slice(0, 2), teamB: four.slice(2, 4) };
+        const four = [...pool].sort(() => Math.random() - 0.5).slice(0, 4);
+        const { a, b } = splitScore(four, matchCtx);
+        const queued = { teamA: a, teamB: b };
         const nextData = { ...current, [courtNum]: { ...existing, next: queued } };
         tx.set(REFS.courtmatches, { data: nextData });
         return { ok: true };
@@ -1265,17 +1307,22 @@ function App() {
   // 여러 사람이 동시에 이 화면을 보고 있어도, startRandomMatchAsMember 자체가 트랜잭션이라 중복 생성은 안 돼요.
   const autoStartInFlight = useRef(false);
   useEffect(() => {
-    if (!autoStart || !myId || meetingEndedToday || randomBusy || autoStartInFlight.current) return;
+    if (!autoStart || !myId || meetingEndedToday || autoStartInFlight.current) return;
     if (waitingPlayers.length < 4) return;
-    const freeCourt = Array.from({ length: numCourts }, (_, i) => i + 1).find((n) => {
+    const freeCourts = Array.from({ length: numCourts }, (_, i) => i + 1).filter((n) => {
       if (lockedCourts.includes(n)) return false;
       const m = courtMatches[n];
       return !m || m.done || m.date !== todayStr();
     });
-    if (!freeCourt) return;
+    if (freeCourts.length === 0) return;
+    // 두세 코트가 한꺼번에 비어도 순서대로 다 채워요 — 인원이 되는 만큼 이어서 매칭해요.
     autoStartInFlight.current = true;
-    startRandomMatchAsMember(freeCourt).finally(() => {
-      setTimeout(() => { autoStartInFlight.current = false; }, 1500);
+    (async () => {
+      for (const courtNum of freeCourts) {
+        await startRandomMatchAsMember(courtNum);
+      }
+    })().finally(() => {
+      setTimeout(() => { autoStartInFlight.current = false; }, 800);
     });
   }, [autoStart, waitingPlayers.length, courtMatches, numCourts, lockedCourts, meetingEndedToday, myId]);
 
@@ -1396,6 +1443,7 @@ function App() {
   // 점수는 타이핑할 때마다 서버 왕복(트랜잭션)을 기다리면 버벅이니까, 화면은 즉시 업데이트하고
   // 서버 저장은 타이핑이 잠깐 멈췄을 때 한 번만 보내요 (디바운스).
   const scoreDebounceRef = useRef({});
+  const dirtyScoreFieldsRef = useRef({}); // 아직 서버에 저장 안 된(타이핑 중인) 점수 칸 표시 — 실시간 동기화가 이 값을 안 덮어쓰게 해줘요
   function updateScore(courtNum, side, value) {
     if (!/^\d{0,2}$/.test(value)) return;
     setCourtMatches((prev) => {
@@ -1404,9 +1452,12 @@ function App() {
       return { ...prev, [courtNum]: { ...m, [side]: value } };
     });
     const key = `${courtNum}-${side}`;
+    const dirtyKey = `${courtNum}|${side}`;
+    dirtyScoreFieldsRef.current[dirtyKey] = true;
     clearTimeout(scoreDebounceRef.current[key]);
     scoreDebounceRef.current[key] = setTimeout(() => {
-      persistCourtMatches(courtNum, (prevRemote) => (prevRemote ? { ...prevRemote, [side]: value } : prevRemote));
+      persistCourtMatches(courtNum, (prevRemote) => (prevRemote ? { ...prevRemote, [side]: value } : prevRemote))
+        .finally(() => { delete dirtyScoreFieldsRef.current[dirtyKey]; });
     }, 350);
   }
 
@@ -2096,19 +2147,41 @@ function App() {
                                         <span className="text-xs text-stone-600 w-16 truncate shrink-0">{p.name}</span>
                                         <span className="text-stone-300 text-xs">→</span>
                                         <select
-                                          onChange={(e) => { if (e.target.value) swapPlayerInMatch(courtNum, p.id, e.target.value); }}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (!val) return;
+                                            if (val.startsWith("wait:")) {
+                                              swapPlayerInMatch(courtNum, p.id, val.slice(5));
+                                            } else if (val.startsWith("court:")) {
+                                              const [, otherCourt, otherPlayerId] = val.split(":");
+                                              swapPlayerAcrossCourts(courtNum, p.id, Number(otherCourt), otherPlayerId);
+                                            }
+                                          }}
                                           defaultValue=""
                                           className="flex-1 text-xs border border-stone-200 rounded-lg px-2 py-1"
                                         >
                                           <option value="">다른 사람으로 교체...</option>
-                                          {waitingPlayers.map((wp) => (
-                                            <option key={wp.id} value={wp.id}>{wp.name}</option>
-                                          ))}
+                                          {waitingPlayers.length > 0 && (
+                                            <optgroup label="대기 중">
+                                              {waitingPlayers.map((wp) => (
+                                                <option key={wp.id} value={`wait:${wp.id}`}>{wp.name}</option>
+                                              ))}
+                                            </optgroup>
+                                          )}
+                                          {Object.entries(courtMatches)
+                                            .filter(([cn, cm]) => Number(cn) !== courtNum && cm && !cm.done && cm.date === todayStr())
+                                            .map(([cn, cm]) => (
+                                              <optgroup key={cn} label={`코트 ${cn}에서 뛰는 중 (자리 맞바꿈)`}>
+                                                {[...cm.teamA, ...cm.teamB].map((op) => (
+                                                  <option key={op.id} value={`court:${cn}:${op.id}`}>{op.name}</option>
+                                                ))}
+                                              </optgroup>
+                                            ))}
                                         </select>
                                       </div>
                                     ))}
-                                    {waitingPlayers.length === 0 && (
-                                      <p className="text-[11px] text-stone-400 text-center py-1">지금 대기 중인 사람이 없어요.</p>
+                                    {waitingPlayers.length === 0 && Object.values(courtMatches).filter((cm) => cm && !cm.done && cm.date === todayStr()).length <= 1 && (
+                                      <p className="text-[11px] text-stone-400 text-center py-1">지금 바꿀 수 있는 사람이 없어요.</p>
                                     )}
                                   </div>
                                 )}
