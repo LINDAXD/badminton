@@ -877,10 +877,11 @@ function App() {
 
   // 양방향 동기화: 일정에서 참석하면 매칭 참석자에 추가되고, 일정에서 취소하면 매칭 참석자에서도 빠져요
   // (단, 지금 경기 중인 사람은 경기 끝날 때까지는 그대로 두고, 다음부터 안 뽑히게만 해요 — 게스트는 이 로직 대상 아니에요)
+  // 홈 화면이랑 똑같이 "일정 참석 + 체크인 기록"을 합쳐서 봐요 — 하나만 보면 홈이랑 인원수가 서로 달라 보일 수 있어서요.
   useEffect(() => {
     if (!roster.length) return;
     setPlayers((prev) => {
-      const todayAttendees = todayScheduleAttendees(getEffectiveAttendanceEvents(schedule));
+      const todayAttendees = combinedTodayAttendees(schedule, checkinlog, roster);
       const attendeeIds = new Set(todayAttendees.map((a) => a.id));
       const keptGuests = prev.filter((p) => String(p.id).startsWith("guest_"));
       const attendingMembers = todayAttendees.map((a) => {
@@ -900,7 +901,7 @@ function App() {
       const sameIds = sameLength && next.every((p) => prev.some((pp) => pp.id === p.id));
       return sameIds ? prev : next;
     });
-  }, [rsvp, roster, schedule, courtMatches]);
+  }, [rsvp, roster, schedule, courtMatches, checkinlog]);
 
   function persistRoster(next) {
     setRoster(next);
